@@ -243,17 +243,35 @@ AUTONOMOUS EXECUTION PROTOCOL FOR REQUESTS WITHOUT IMAGES:
 6. FOR BUDGETS / EXPENSES:
    • Call 'stageBudget' or 'stageExpense' with realistic breakdown.
 
-7. GENERAL RESEARCH & SEARCH INQUIRIES:
-   • When the user asks to search the web or research information (e.g. 'search SBI Mudra loan eligibility', 'search mandi rates', 'check guidelines'):
-   • Call 'webSearch' (or 'getMandiRates') to fetch authentic, verified details.
-   • Provide a clear, concise spoken summary so the live voice agent can explain it orally to the user.
+7. FOR COMPETITORS & CATCHMENT MAP RADAR:
+   • Call 'scanCatchmentRadar' with category, location, and radiusKm. This pulls live Google Maps places via SerpApi and renders an interactive map on the user's screen.
+
+8. FOR MANDI ARBITRAGE & APMC RATES:
+   • Call 'getMandiArbitrage' (or 'getMandiRates') with commodity and district/state. This computes live APMC yard price spreads and transport viability.
+
+9. FOR SWOT STRATEGIC ANALYSIS:
+   • Call 'runSWOTScan' with category and location. This builds a 4-quadrant SWOT matrix grounded in local competitor density.
+
+10. FOR GOVERNMENT SUBSIDIES & MSME SCHEMES:
+   • Call 'evaluateGovtSchemes' with businessSector and investmentAmount to match Mudra, PMEGP, PM SVANidhi, and CGTMSE options.
+
+11. FOR LOAN EMI & COMMERCIAL BANK RATES:
+   • Call 'evaluateCreditAndEMI' with amount, tenureYears, and interestRate to compare real bank rates and repayment schedules.
+
+12. GENERAL RESEARCH & SEARCH INQUIRIES:
+   • When the user asks to search the web or research information:
+   • Call 'webSearch' to fetch authentic, verified details.
    • If the search results warrant an official table or form, call 'stageDocument' or 'stageForm' to display it on screen simultaneously.
 
+13. FOR NORMAL CHATS & GENERAL DIALOGUE:
+   • If the user is just saying hello, asking a clarifying question, or engaging in general discussion WITHOUT asking for market intelligence, forms, or documents:
+   • DO NOT CALL ANY TOOLS! Reply directly in a friendly, conversational sentence. Staging is strictly for structured data, subagent intelligence, and official documents!
+
 CRITICAL POST-TOOL CONTENT SUMMARY RULE (MANDATORY 15 TO 25 WORDS MAXIMUM — ZERO FLUFF, 1-SECOND BURST):
-- Once you call 'stageForm', 'stageDocument', or 'getMandiRates':
-- The visual interface is ALREADY rendered directly on the user's screen!
-- Your final text response MUST be ONLY 1 single crisp spoken summary sentence (15 to 25 words maximum) stating the specific key details of what was created or extracted — e.g. bank name, applicant name, key numbers, or mandi rates found (e.g. "मैंने आपके पासबुक से रमेश कुमार के नाम पर 5 लाख का एसबीआई मुद्रा लोन फॉर्म स्क्रीन पर तैयार कर दिया है।" or "मैंने इंदौर मंडी में प्याज के भाव और तुलनात्मक चार्ट स्क्रीन पर तैयार कर दिया है।").
-- NEVER output generic hollow sentences like "आपका फॉर्म तैयार है" or multi-paragraph outlines. Provide the exact key facts in under 25 words so the live voice agent knows the exact content details and can speak them immediately without any delay!
+- Once you call a subagent or staging tool ('scanCatchmentRadar', 'getMandiArbitrage', 'runSWOTScan', 'evaluateGovtSchemes', 'evaluateCreditAndEMI', 'stageForm', 'stageDocument'):
+- The visual interface and map are ALREADY rendered directly on the user's screen!
+- Your final text response MUST be ONLY 1 single crisp spoken summary sentence (15 to 25 words maximum) stating the key takeaway (e.g. "I found 8 competitor shops on Google Maps near Indiranagar with an average 4.2 rating." or "मैंने इंदौर मंडी में प्याज के भाव और तुलनात्मक चार्ट स्क्रीन पर तैयार कर दिया है।").
+- NEVER output generic hollow sentences or multi-paragraph outlines. Keep it under 25 words so the live voice agent can speak it immediately!
 
 CRITICAL FORM STAGING & IN-PLACE EDITING MANDATE:
 - If the user asks to update, fill, or set details, BUT no active form exists on screen yet (or 'getArtifacts' returns 0 forms): You MUST CREATE the digital form using 'stageForm' with those details populated! You are STRICTLY FORBIDDEN from generating text claiming a form was updated unless 'stageForm' has actually executed in this turn!
@@ -345,6 +363,17 @@ STRICT REGULATORY, SAFETY & PROHIBITED COMMERCE POLICY (MANDATORY):
           "stageExpense",
         ]);
 
+        const SUBAGENT_TOOLS = new Set([
+          "scanCatchmentRadar",
+          "searchCompetitors",
+          "runSWOTScan",
+          "getMandiArbitrage",
+          "evaluateGovtSchemes",
+          "evaluateCreditAndEMI",
+          "getOndcIntelligence",
+          "predictDistrictBusinesses",
+        ]);
+
         const stripCharts = (s: string) =>
           s
             .replace(/```chart[\s\S]*?```/g, "")
@@ -399,13 +428,45 @@ STRICT REGULATORY, SAFETY & PROHIBITED COMMERCE POLICY (MANDATORY):
                   spokenHint: "Aapka document aur price catalog screen par taiyar ho raha hai.",
                   progressPhase: "building_document",
                 });
-              } else if (name === "getMandiRates") {
+              } else if (name === "getMandiRates" || name === "getMandiArbitrage") {
                 sendEvent("status", {
                   status: "working",
-                  activeTool: "getMandiRates",
-                  description: `Fetching live mandi commodity rates for: ${toolArgs.commodity || query}`,
-                  spokenHint: "Mandi portal se taaza bhav nikaale ja rahe hain.",
+                  activeTool: name,
+                  description: `Fetching live APMC mandi rates for: ${toolArgs.commodity || query}`,
+                  spokenHint: "Mandi portal se taaza bhav aur inter-mandi munafey ka hisab nikala ja raha hai.",
                   progressPhase: "fetching_rates",
+                });
+              } else if (name === "scanCatchmentRadar" || name === "searchCompetitors") {
+                sendEvent("status", {
+                  status: "working",
+                  activeTool: name,
+                  description: `Scanning Google Maps catchment radar for: ${toolArgs.category || query}`,
+                  spokenHint: "Google Maps par local competitors aur unke ratings scan ho rahe hain.",
+                  progressPhase: "scanning_map",
+                });
+              } else if (name === "runSWOTScan") {
+                sendEvent("status", {
+                  status: "working",
+                  activeTool: "runSWOTScan",
+                  description: `Compiling 4-quadrant SWOT matrix for: ${toolArgs.category || query}`,
+                  spokenHint: "Aapke business ke liye SWOT analysis matrix taiyar ho rahi hai.",
+                  progressPhase: "analyzing_swot",
+                });
+              } else if (name === "evaluateGovtSchemes") {
+                sendEvent("status", {
+                  status: "working",
+                  activeTool: "evaluateGovtSchemes",
+                  description: `Verifying government MSME schemes for: ${toolArgs.businessSector || query}`,
+                  spokenHint: "Sarkari subsidy aur loan schemes ki eligibility check ho rahi hai.",
+                  progressPhase: "matching_schemes",
+                });
+              } else if (name === "evaluateCreditAndEMI") {
+                sendEvent("status", {
+                  status: "working",
+                  activeTool: "evaluateCreditAndEMI",
+                  description: `Calculating loan EMI & bank rates for ₹${toolArgs.amount || query}`,
+                  spokenHint: "Bank loan EMI aur byaaj daron ki calculation chal rahi hai.",
+                  progressPhase: "calculating_emi",
                 });
               } else if (name === "stageChart") {
                 sendEvent("status", {
@@ -463,36 +524,65 @@ STRICT REGULATORY, SAFETY & PROHIBITED COMMERCE POLICY (MANDATORY):
                 status: "completed",
               });
 
-              if (toolOut?.isArtifact) {
-                sendEvent("artifact", {
-                  artifactId: toolOut.artifactId || toolOut.data?.artifactId,
-                  targetArtifactId: toolOut.targetArtifactId,
-                  isUpdated: toolOut.isUpdated,
-                  artifactType: toolOut.artifactType,
-                  title: toolOut.title,
-                  summary: toolOut.summary,
-                  data: toolOut.data,
-                });
+              if (toolOut?.isArtifact || SUBAGENT_TOOLS.has(name)) {
+                const isSubagent = SUBAGENT_TOOLS.has(name);
+                const subagentCalls = executedToolCalls.filter((tc) =>
+                  SUBAGENT_TOOLS.has(tc.toolName),
+                );
+
+                const artifactPayload = isSubagent
+                  ? {
+                      artifactId: `swarm_dossier_${Date.now()}`,
+                      targetArtifactId: toolOut.targetArtifactId,
+                      isUpdated: toolOut.isUpdated,
+                      artifactType: "swarm_dossier",
+                      title:
+                        subagentCalls.length > 1
+                          ? `Market Intelligence Dossier (${subagentCalls.length} Tabs Active)`
+                          : (toolOut.title || "Market Intelligence Dossier"),
+                      summary:
+                        toolOut.spokenSummary ||
+                        toolOut.summary ||
+                        "Market intelligence dossier ready on screen.",
+                      data: {
+                        toolCalls: executedToolCalls,
+                        content: toolOut.data?.content || toolOut.content || "",
+                        ...toolOut.data,
+                      },
+                    }
+                  : {
+                      artifactId: toolOut.artifactId || toolOut.data?.artifactId,
+                      targetArtifactId: toolOut.targetArtifactId,
+                      isUpdated: toolOut.isUpdated,
+                      artifactType: toolOut.artifactType,
+                      title: toolOut.title,
+                      summary: toolOut.summary,
+                      data: toolOut.data,
+                    };
+
+                sendEvent("artifact", artifactPayload);
 
                 sendEvent("status", {
                   status: "completed",
                   activeTool: "completed",
-                  description: `Completed: ${toolOut.title || "Item ready"}`,
-                  spokenHint: `${toolOut.title || "Aapka form"} bilkul taiyar hai aur screen par open ho chuka hai.`,
+                  description: `Completed: ${artifactPayload.title || "Item ready"}`,
+                  spokenHint:
+                    toolOut.spokenSummary ||
+                    `${artifactPayload.title || "Aapka form"} bilkul taiyar hai aur screen par open ho chuka hai.`,
                   progressPhase: "completed",
-                  artifact: {
-                    artifactId: toolOut.artifactId || toolOut.data?.artifactId,
-                    artifactType: toolOut.artifactType,
-                    title: toolOut.title,
-                    summary: toolOut.summary,
-                    data: toolOut.data,
-                  },
+                  artifact: artifactPayload,
                 });
 
-                if (STAGE_TOOLS.has(name) && toolOut?.isArtifact) {
+                if (isSubagent) {
+                  finish(
+                    toolOut.spokenSummary ||
+                      toolOut.summary ||
+                      `${artifactPayload.title} is ready on screen.`,
+                  );
+                } else if (STAGE_TOOLS.has(name) && toolOut?.isArtifact) {
                   const body =
                     typeof toolOut.data?.content === "string"
-                      ? stripCharts(toolOut.data.content).slice(0, 350)
+                      ? stripCharts(toolOut.data.content).slice(0, 200)
                       : "";
                   finish(
                     `${toolOut.title || "Item"} is ready on screen. ${toolOut.summary || ""} ${body}`.trim(),

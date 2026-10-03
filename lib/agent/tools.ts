@@ -19,6 +19,7 @@ import { runCreditEMISubAgent } from "./subagents/credit-emi-subagent";
 import { runSWOTSubAgent } from "./subagents/swot-subagent";
 import { runMandiSubAgent } from "./subagents/mandi-subagent";
 import { runSchemesSubAgent } from "./subagents/schemes-subagent";
+import { runCustomResearchSubAgent } from "./subagents/custom-research-subagent";
 
 /**
  * Zod Schemas for Tools
@@ -1029,60 +1030,14 @@ export function getAgentTools(ctx?: ToolContext) {
     }),
 
     // ─────────────────────────────────────────────────────────────
-    // 2. INTELLIGENT HYBRID WEB SEARCH (Exa Neural + SerpApi Google)
+    // 2. INTELLIGENT WEB GROUNDING (100% SerpApi Google Search)
     // ─────────────────────────────────────────────────────────────
     webSearch: tool({
       description:
-        "Searches the live web for official bank loan application form layouts, MSME PDF fields, mandatory statutory disclosures, government credit schemes, trade circulars, and market regulations.",
+        "Searches the live web via SerpApi Google Search for official bank loan application form layouts, MSME PDF fields, mandatory statutory disclosures, government credit schemes, trade circulars, and market regulations.",
       inputSchema: WebSearchSchema,
       execute: async ({ query, numResults = 5 }) => {
         try {
-          const exaKey = process.env.EXA_API_KEY;
-          if (exaKey) {
-            try {
-              const res = await fetch("https://api.exa.ai/search", {
-                method: "POST",
-                headers: {
-                  "x-api-key": exaKey,
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  query,
-                  numResults,
-                  useAutoprompt: true,
-                  contents: {
-                    text: { maxCharacters: 1500 },
-                    highlights: true,
-                  },
-                }),
-                signal: AbortSignal.timeout(7000),
-              });
-
-              if (res.ok) {
-                const exaData = await res.json();
-                const results = (exaData.results || []).map((r: any) => ({
-                  title: r.title || "Untitled",
-                  url: r.url,
-                  snippet:
-                    Array.isArray(r.highlights) && r.highlights.length > 0
-                      ? r.highlights.join(" ... ")
-                      : r.text || r.snippet || `Source from ${r.url}`,
-                }));
-
-                if (results.length > 0) {
-                  return {
-                    success: true,
-                    provider: "Exa Neural Web Search",
-                    query,
-                    results,
-                  };
-                }
-              }
-            } catch {
-              // fallback to SerpApi
-            }
-          }
-
           const serpResults = await searchGoogleWeb(query, numResults);
           if (serpResults && serpResults.length > 0) {
             return {
@@ -1095,7 +1050,7 @@ export function getAgentTools(ctx?: ToolContext) {
 
           return {
             success: true,
-            provider: "Web Grounding Engine",
+            provider: "SerpApi Grounding Engine",
             query,
             results: [
               {
@@ -1124,14 +1079,15 @@ export function getAgentTools(ctx?: ToolContext) {
       execute: async ({
         query,
         category,
-        radiusKm,
+        radiusKm = 5,
         location,
         lat,
         lon,
         bypassCache,
       }) => {
-        return await searchCompetitorsIntelligence({
-          category: category || query,
+        const resolvedCategory = category || query || "Retail Outlet";
+        const result = await searchCompetitorsIntelligence({
+          category: resolvedCategory,
           radiusKm,
           location,
           lat,
@@ -1139,6 +1095,70 @@ export function getAgentTools(ctx?: ToolContext) {
           userId,
           bypassCache,
         });
+
+        const shops = result.allPlaces && result.allPlaces.length > 0 ? result.allPlaces : result.competitors || [];
+        const avgRating = shops.length > 0 ? (shops.reduce((a, b) => a + (b.rating || 4.0), 0) / shops.length).toFixed(1) : "4.0";
+        const highThreats = shops.filter((s) => s.threatLevel === "High").length;
+        const centerLat = lat || shops[0]?.lat || 12.9716;
+        const centerLng = lon || shops[0]?.lng || 77.5946;
+
+        const content = `### 📍 Competitor Intelligence: ${resolvedCategory} (${result.locationSummary || location || "Catchment Zone"})
+
+Real-time commercial landscape scanned via Google Maps Places API across a ${radiusKm}km operating radius (${shops.length} total outlets verified).
+
+\`\`\`cards
+${JSON.stringify({
+  title: "Catchment Saturation Overview",
+  cards: [
+    { label: "Competitors Mapped", value: `${shops.length} Outlets`, status: "neutral", subtext: `Within ${radiusKm}km` },
+    { label: "Avg Customer Rating", value: `${avgRating}★`, status: Number(avgRating) >= 4.2 ? "warning" : "positive", subtext: "Catchment satisfaction" },
+    { label: "High-Threat Rivals", value: `${highThreats}`, status: highThreats > 2 ? "negative" : "positive", subtext: "4.3+★ & >40 reviews" },
+  ],
+}, null, 2)}
+\`\`\`
+
+\`\`\`map
+${JSON.stringify({
+  title: `${resolvedCategory} Catchment Map (${result.locationSummary || location || "Local Catchment"})`,
+  center: [centerLat, centerLng],
+  zoom: radiusKm <= 2 ? 15 : radiusKm <= 5 ? 14 : 13,
+  radiusKm: radiusKm,
+  markers: [
+    ...(lat && lon ? [{
+      lat: lat,
+      lng: lon,
+      title: result.targetBusinessName || "Proposed Business Location",
+      type: "hub" as const,
+      address: result.locationSummary || location || "Target Hub",
+    }] : []),
+    ...shops.map((s) => ({
+      lat: s.lat,
+      lng: s.lng,
+      title: s.name,
+      rating: s.rating,
+      reviews: s.reviews,
+      threatLevel: s.threatLevel as "High" | "Medium" | "Low",
+      distance: s.distance,
+      address: s.landmark,
+      type: "competitor" as const,
+    })),
+  ],
+  summary: `Interactive radar showing ${shops.length} verified commercial outlets on OpenStreetMap with real customer review volumes.`,
+}, null, 2)}
+\`\`\`
+
+| Business Name | Distance | Rating & Reviews | Price Tier | Address / Area | Threat Level |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+${shops.map((s) => `| **${s.name}** | ${s.distance} | ★ ${s.rating || "4.0"} (${s.reviews || 0}) | ${s.priceRange || "$$"} | ${s.landmark || "Local Area"} | ${s.threatLevel === "High" ? "🔴 High" : s.threatLevel === "Medium" ? "🟡 Medium" : "🟢 Low"} |`).join("\n")}
+
+> **Market Positioning Recommendation:**
+> Focus on personalized customer khata, WhatsApp delivery, and targeted micro-catchments where competitor ratings dip below 4.0★ to secure recurring footfall.`;
+
+        return {
+          ...result,
+          content,
+          spokenSummary: result.spokenSummary,
+        };
       },
     }),
 
@@ -1150,13 +1170,59 @@ export function getAgentTools(ctx?: ToolContext) {
         "Discovers ONDC (Open Network for Digital Commerce) opportunities including B2B wholesale procurement at 8-12% discounts, B2C digital seller apps (Mystore, Magicpin) at 3% commission, and hyper-local delivery partners for any enterprise.",
       inputSchema: OndcIntelligenceSchema,
       execute: async ({ category, location, intent, bypassCache }) => {
-        return await getOndcIntelligence({
+        const result = await getOndcIntelligence({
           category,
           location,
           intent,
           userId,
           bypassCache,
         });
+
+        const procurement = result.data?.procurement || [];
+        const platforms = result.data?.sellerPlatforms || [];
+        const comparison = result.data?.commissionComparison;
+
+        const content = `### 🌐 ONDC Digital Commerce Roadmap: ${result.category || category || "Enterprise"} (${result.location || location || "India"})
+
+Open Network for Digital Commerce (ONDC) blueprint providing direct manufacturer procurement discounts and 3%-5% seller network onboarding.
+
+\`\`\`cards
+${JSON.stringify({
+  title: "ONDC Digital Commerce Economics",
+  cards: [
+    { label: "Traditional Aggregators", value: comparison?.traditionalAggregatorRate || "25% - 30%", status: "negative", subtext: "Legacy aggregator cut" },
+    { label: "ONDC Platform Fee", value: comparison?.ondcCommissionRate || "3% - 5%", status: "positive", subtext: "Mystore / Magicpin / SellerApp" },
+    { label: "Monthly Margin Boost", value: comparison?.monthlyMarginBoostPercent || "+20%", status: "positive", subtext: "Direct retained margin" }
+  ]
+}, null, 2)}
+\`\`\`
+
+\`\`\`mermaid
+graph LR
+    A[Wholesale Mandi / Supplier] -->|Direct ONDC B2B 8-12% Discount| B[My Enterprise]
+    B -->|Seller Network 3-5% Fee| C[Mystore / Magicpin]
+    C -->|Open Buyer Network| D[PhonePe Pincode / Paytm]
+    D -->|Hyper-local Logistics| E[End Consumer]
+\`\`\`
+
+#### 📦 Direct B2B Wholesale Procurement
+| Commodity / Raw Material | Traditional Wholesale Cut | ONDC Direct Rate Discount | Monthly Est. Savings |
+| :--- | :--- | :--- | :--- |
+${procurement.map((p) => `| **${p.commodity}** | ${p.traditionalMarginPercent} | **${p.ondcWholesaleDiscountPercent}** | **₹${p.estimatedMonthlySavingsInr.toLocaleString("en-IN")}/mo** |`).join("\n")}
+
+#### 🛒 Recommended Digital Seller Networks
+| Seller Application | Commission Fee | Reach & Channels | Best Suited For |
+| :--- | :--- | :--- | :--- |
+${platforms.map((pl) => `| **${pl.platformName}** | **${pl.commissionRate}** | ${(pl.buyerNetworkReach || []).join(", ")} | ${pl.bestFor} |`).join("\n")}
+
+> **Immediate Action Checklist:**
+${(result.data?.recommendedActions || []).map((a) => `> • ${a}`).join("\n")}`;
+
+        return {
+          ...result,
+          content,
+          spokenSummary: result.spokenSummary || `ONDC connects you to wholesale procurement at 8 to 12 percent discounts and digital selling at only 3 to 5 percent platform commission.`,
+        };
       },
     }),
 
@@ -1175,7 +1241,7 @@ export function getAgentTools(ctx?: ToolContext) {
         riskLevel,
         bypassCache,
       }) => {
-        return await predictDistrictBusinessesIntelligence({
+        const result = await predictDistrictBusinessesIntelligence({
           district,
           state,
           budget,
@@ -1184,6 +1250,37 @@ export function getAgentTools(ctx?: ToolContext) {
           userId,
           bypassCache,
         });
+
+        const cards = result.cards || [];
+
+        const content = `### 🏙️ High-ROI Business Opportunities: ${result.district}, ${result.state} (Budget: ₹${((result.budget || 200000) / 100000).toFixed(1)} Lakh)
+
+Autonomous market analysis grounded in live district commercial saturation, APMC wholesale supply, and central MSME subsidy programs.
+
+\`\`\`cards
+${JSON.stringify({
+  title: "District Feasibility Highlights",
+  cards: cards.slice(0, 4).map((c) => ({
+    label: c.title.slice(0, 20),
+    value: c.monthlyProfit?.formatted || "₹35k/mo",
+    status: c.riskLevel === "LOW" ? "positive" : c.riskLevel === "MODERATE" ? "neutral" : "warning",
+    subtext: `Payback: ${c.paybackPeriodMonths || 6} Mo`,
+  })),
+}, null, 2)}
+\`\`\`
+
+| Venture Category | Investment Req. | Expected Monthly Profit | Margin % | Risk Level |
+| :--- | :--- | :--- | :--- | :--- |
+${cards.map((c) => `| **${c.title}** | ${c.capitalRequired?.formatted || "—"} | **${c.monthlyProfit?.formatted || "—"}** | ${c.monthlyProfit?.marginPercentage || 20}% | ${c.riskLevel === "LOW" ? "🟢 Low Risk" : c.riskLevel === "MODERATE" ? "🟡 Moderate" : "🔴 High Risk"} |`).join("\n")}
+
+#### 💡 Sector Insights & Subsidies
+${cards.map((c) => `**${c.title}**: ${c.whyInThisDistrict}\n- *Subsidy:* ${(c.matchedSubsidies || []).map((s) => `${s.name} (${s.percentage})`).join(", ") || "Eligible for Mudra & PMEGP"}`).join("\n\n")}`;
+
+        return {
+          ...result,
+          content,
+          spokenSummary: result.spokenSummary || `In ${result.district}, top recommended ventures for ₹${((result.budget || 200000) / 100000).toFixed(1)} Lakh budget include ${cards[0]?.title || "manufacturing"} and ${cards[1]?.title || "retail"} with up to 35% PMEGP subsidy eligibility.`,
+        };
       },
     }),
 
@@ -1747,10 +1844,40 @@ export function getAgentTools(ctx?: ToolContext) {
       execute: async (params) => {
         const result = await runCreditEMISubAgent(params);
         const summary = `**Monthly EMI is ₹${result.monthlyEMI.toLocaleString("en-IN")}** for **₹${(params.amount / 100000).toFixed(1)} Lakh** at **${result.annualInterestRate}%** over **${result.tenureMonths} months**. Total interest payable is **₹${result.totalInterest.toLocaleString("en-IN")}**. ${result.insights?.recommendation || ""}`;
-        
+        const spokenSummary = `For a ₹${(params.amount / 100000).toFixed(1)} Lakh loan at ${result.annualInterestRate}% interest over ${result.tenureMonths} months, your monthly EMI comes to ₹${result.monthlyEMI.toLocaleString("en-IN")}. Total interest is ₹${result.totalInterest.toLocaleString("en-IN")}.`;
+
         const content = `### 💳 Commercial Credit & EMI Amortization: ₹${(params.amount / 100000).toFixed(1)} Lakh (${result.tenureMonths} Months)
 
 Financial feasibility evaluation comparing scheduled debt service burden against live public & private lending rates scraped via SerpApi.
+
+\`\`\`cards
+${JSON.stringify({
+  title: "Commercial Credit Key Metrics",
+  cards: [
+    { label: "Monthly EMI", value: `₹${result.monthlyEMI.toLocaleString("en-IN")}`, status: "positive", subtext: "Fixed monthly debt service" },
+    { label: "Annual Rate", value: `${result.annualInterestRate}%`, status: "neutral", subtext: "Commercial benchmark" },
+    { label: "Total Interest", value: `₹${result.totalInterest.toLocaleString("en-IN")}`, status: "warning", subtext: `Over ${result.tenureMonths} months` },
+    { label: "Total Repayment", value: `₹${result.totalPayment.toLocaleString("en-IN")}`, status: "neutral", subtext: "Principal + Interest" },
+  ],
+}, null, 2)}
+\`\`\`
+
+\`\`\`calculator
+${JSON.stringify({
+  title: "Live Loan Repayment & EMI Simulator",
+  description: "Adjust principal, interest rate, and tenure to simulate repayment schedules live",
+  inputs: [
+    { id: "principal", label: "Loan Principal", type: "slider", min: 50000, max: Math.max(5000000, params.amount * 2), step: 25000, defaultValue: params.amount, unit: "₹" },
+    { id: "rate", label: "Interest Rate (% p.a.)", type: "slider", min: 7.0, max: 18.0, step: 0.25, defaultValue: result.annualInterestRate || 10.5, unit: "%" },
+    { id: "tenure", label: "Tenure (Months)", type: "slider", min: 12, max: 84, step: 6, defaultValue: result.tenureMonths || 36, unit: "Months" }
+  ],
+  outputs: [
+    { label: "Monthly EMI", formula: "emi(principal, rate, tenure)", format: "currency", highlight: true },
+    { label: "Total Interest", formula: "total_interest(principal, rate, tenure)", format: "currency" },
+    { label: "Total Repayment", formula: "principal + total_interest(principal, rate, tenure)", format: "currency" }
+  ]
+}, null, 2)}
+\`\`\`
 
 | Metric | Scheduled Value | Metric | Scheduled Value |
 | :--- | :--- | :--- | :--- |
@@ -1777,9 +1904,11 @@ ${result.amortizationPreview.map((m) => `| Month ${m.month} | ₹${m.principalPa
           artifactType: "emi_calculator",
           title: `EMI & Loan Analysis (₹${(params.amount / 100000).toFixed(1)} Lakh @ ${result.annualInterestRate}%)`,
           summary,
+          spokenSummary,
           data: {
             ...result,
             content,
+            spokenSummary,
           },
         };
       },
@@ -1799,10 +1928,22 @@ ${result.amortizationPreview.map((m) => `| Month ${m.month} | ₹${m.principalPa
         const result = await runSWOTSubAgent(params);
         const highThreatCount = result.competitorHighlights?.filter((c) => c.threatLevel === "High").length || 0;
         const summary = `**SWOT Scan Completed**: Analyzed **${result.totalCompetitorsFound} local businesses** in ${result.location}. Identified **${result.opportunities.length} growth opportunities** and **${result.threats.length} competitive threats** (${highThreatCount} high-threat outlets). Proximity and agile customer service remain key differentiators.`;
+        const spokenSummary = `SWOT analysis for ${params.category} in ${result.location} identified ${result.opportunities.length} growth opportunities and ${result.threats.length} competitive threats across ${result.totalCompetitorsFound} local establishments.`;
 
         const content = `### 🧭 Strategic 4-Quadrant SWOT Matrix: ${params.category} (${result.location})
 
 Catchment analysis grounded in live Google Maps business listings and neighborhood retail commercial density (${result.radiusKm}km radius).
+
+\`\`\`cards
+${JSON.stringify({
+  title: "SWOT Catchment Snapshot",
+  cards: [
+    { label: "Competitors Mapped", value: `${result.totalCompetitorsFound}`, status: "neutral", subtext: `Within ${result.radiusKm}km radius` },
+    { label: "Growth Opportunities", value: `${result.opportunities.length}`, status: "positive", subtext: "Actionable strategic niches" },
+    { label: "High Threat Outlets", value: `${highThreatCount}`, status: highThreatCount > 2 ? "negative" : "positive", subtext: "4.3+★ rated rivals" },
+  ],
+}, null, 2)}
+\`\`\`
 
 | Quadrant | Strategic Factors & Findings |
 | :--- | :--- |
@@ -1827,9 +1968,11 @@ ${result.strategicActionPlan.map((a) => `> • ${a}`).join("\n")}`;
           artifactType: "swot_matrix",
           title: `SWOT Matrix: ${params.category} (${result.location})`,
           summary,
+          spokenSummary,
           data: {
             ...result,
             content,
+            spokenSummary,
           },
         };
       },
@@ -1850,14 +1993,59 @@ ${result.strategicActionPlan.map((a) => `> • ${a}`).join("\n")}`;
         const avgRating = shops.length > 0 ? (shops.reduce((a, b) => a + (b.rating || 4.0), 0) / shops.length).toFixed(1) : "4.0";
         const highThreats = shops.filter((s) => s.threatLevel === "High").length;
         const summary = `**Catchment Radar**: Located **${shops.length} verified commercial outlets** on Google Maps within **${params.radiusKm || 5}km** in ${params.location || "Catchment Area"}. Average customer rating is **${avgRating}★** with ${highThreats} high-threat competitors detected.`;
+        const spokenSummary = `Located ${shops.length} verified competitors for ${params.category} within ${params.radiusKm || 5} kilometers of ${params.location || "your location"}. The average customer rating is ${avgRating} stars with ${highThreats} high-threat outlets detected.`;
+
+        const centerLat = params.lat || shops[0]?.lat || 12.9716;
+        const centerLng = params.lon || shops[0]?.lng || 77.5946;
 
         const content = `### 📍 Catchment Competitor Radar: ${params.category} (${params.location || "Catchment Zone"})
 
 Real-time commercial landscape scanned via Google Maps Places API across a ${params.radiusKm || 5}km operating radius (${shops.length} total outlets verified).
 
+\`\`\`cards
+${JSON.stringify({
+  title: "Catchment Saturation Overview",
+  cards: [
+    { label: "Competitors Mapped", value: `${shops.length} Outlets`, status: "neutral", subtext: `Within ${params.radiusKm || 5}km` },
+    { label: "Avg Customer Rating", value: `${avgRating}★`, status: Number(avgRating) >= 4.2 ? "warning" : "positive", subtext: "Catchment satisfaction" },
+    { label: "High-Threat Rivals", value: `${highThreats}`, status: highThreats > 2 ? "negative" : "positive", subtext: "4.3+★ & >40 reviews" },
+  ],
+}, null, 2)}
+\`\`\`
+
+\`\`\`map
+${JSON.stringify({
+  title: `${params.category} Catchment Map (${params.location || "Local Catchment"})`,
+  center: [centerLat, centerLng],
+  zoom: (params.radiusKm || 5) <= 2 ? 15 : (params.radiusKm || 5) <= 5 ? 14 : 13,
+  radiusKm: params.radiusKm || 5,
+  markers: [
+    ...(params.lat && params.lon ? [{
+      lat: params.lat,
+      lng: params.lon,
+      title: "Proposed Business Location",
+      type: "hub" as const,
+      address: params.location || "Target Hub",
+    }] : []),
+    ...shops.map((s) => ({
+      lat: s.lat,
+      lng: s.lng,
+      title: s.name,
+      rating: s.rating,
+      reviews: s.reviews,
+      threatLevel: s.threatLevel as "High" | "Medium" | "Low",
+      distance: s.distance,
+      address: s.landmark || s.address,
+      type: "competitor" as const,
+    })),
+  ],
+  summary: `Interactive radar showing ${shops.length} verified commercial outlets on OpenStreetMap with real customer review volumes.`,
+}, null, 2)}
+\`\`\`
+
 | Business Name | Distance | Rating & Reviews | Price Tier | Address / Area | Threat Level |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-${shops.map((s) => `| **${s.name}** | ${s.distance} | ★ ${s.rating || "4.0"} (${s.userRatingsTotal || 0}) | ${s.priceLevel || "$$"} | ${s.address || s.vicinity || "Local Yard"} | ${s.threatLevel === "High" ? "🔴 High" : s.threatLevel === "Medium" ? "🟡 Medium" : "🟢 Low"} |`).join("\n")}
+${shops.map((s) => `| **${s.name}** | ${s.distance} | ★ ${s.rating || "4.0"} (${s.reviews || 0}) | ${s.priceRange || "$$"} | ${s.landmark || "Local Area"} | ${s.threatLevel === "High" ? "🔴 High" : s.threatLevel === "Medium" ? "🟡 Medium" : "🟢 Low"} |`).join("\n")}
 
 > **Market Positioning Recommendation:**
 > Focus on personalized customer khata, WhatsApp delivery, and targeted micro-catchments where competitor ratings dip below 4.0★ to secure recurring footfall.`;
@@ -1868,6 +2056,7 @@ ${shops.map((s) => `| **${s.name}** | ${s.distance} | ★ ${s.rating || "4.0"} (
           artifactType: "catchment_radar",
           title: `Competitor Radar: ${params.category} (${shops.length} Outlets)`,
           summary,
+          spokenSummary,
           data: {
             category: params.category,
             location: params.location || "Catchment Area",
@@ -1875,6 +2064,7 @@ ${shops.map((s) => `| **${s.name}** | ${s.distance} | ★ ${s.rating || "4.0"} (
             totalFound: shops.length,
             competitors: shops,
             content,
+            spokenSummary,
           },
         };
       },
@@ -1903,9 +2093,60 @@ ${shops.map((s) => `| **${s.name}** | ${s.distance} | ★ ${s.rating || "4.0"} (
           summary += `Live trading rates mapped across ${result.baseDistrict} APMC. ${result.aiAdvisory}`;
         }
 
+        const spokenSummary = bestYard
+          ? `${bestYard.mandiName} offers the highest rate for ${result.commodity} at ₹${bestYard.modalPrice.toLocaleString("en-IN")} per quintal.${bestArb ? ` Transport arbitrage to ${bestArb.targetMandi} yields a net profit of ₹${bestArb.netProfitPerQuintal} per quintal.` : ""}`
+          : `Live mandi wholesale rates analyzed for ${result.commodity} in ${result.baseDistrict}.`;
+
         const content = `### 🌾 Live APMC Mandi Rates: ${result.commodity} (${result.baseDistrict} & Regional Yards)
 
 ${result.marketDynamics ? `**Market Dynamics:** ${result.marketDynamics}\n` : `Here is the wholesale market intelligence, price spreads, and transport arbitrage across ${result.baseDistrict} and key surrounding regional feeder yards:\n`}
+
+\`\`\`cards
+${JSON.stringify({
+  title: `${result.commodity} Wholesale Spread Overview`,
+  cards: [
+    { label: "Top Realization Yard", value: bestYard?.mandiName ? bestYard.mandiName.split(/[(/ ]/)[0] : "APMC", status: "positive", subtext: `₹${bestYard?.modalPrice || 0}/qtl modal` },
+    { label: "Max Arbitrage Margin", value: bestArb ? `+₹${bestArb.netProfitPerQuintal}/qtl` : "Spot Trading", status: "positive", subtext: bestArb ? `${bestArb.sourceMandi} ➜ ${bestArb.targetMandi}` : "Local clearances" },
+    { label: "Target Market", value: result.baseDistrict, status: "neutral", subtext: "Primary consumption hub" },
+  ],
+}, null, 2)}
+\`\`\`
+
+${rates.length > 1 ? `
+\`\`\`chart
+${JSON.stringify({
+  type: "bar",
+  title: `${result.commodity} Modal Price Comparison Across APMC Yards (₹/qtl)`,
+  data: rates.map((r) => ({
+    name: r.mandiName.split(/[(/ ]/)[0],
+    price: r.modalPrice,
+  })),
+  xKey: "name",
+  series: [{ key: "price", name: "Modal Price (₹/qtl)", color: "#10b981" }],
+  unit: "₹",
+}, null, 2)}
+\`\`\`
+` : ""}
+
+\`\`\`calculator
+${JSON.stringify({
+  title: `${result.commodity} Arbitrage & Transport Profit Simulator`,
+  description: "Adjust dispatch volume, target realization, and transport distance to calculate net earnings live",
+  inputs: [
+    { id: "volume", label: "Dispatch Volume", type: "slider", min: 10, max: 250, step: 5, defaultValue: 50, unit: "qtl" },
+    { id: "targetRate", label: "Target Yard Modal Rate", type: "slider", min: 800, max: 15000, step: 50, defaultValue: bestYard?.modalPrice || 3500, unit: "₹" },
+    { id: "sourceRate", label: "Source Procurement Rate", type: "slider", min: 600, max: 12000, step: 50, defaultValue: Math.round((bestYard?.modalPrice || 3500) * 0.88), unit: "₹" },
+    { id: "distanceKm", label: "Haulage Distance", type: "slider", min: 20, max: 400, step: 10, defaultValue: 120, unit: "km" },
+    { id: "freightPerKm", label: "Freight Rate per km", type: "slider", min: 15, max: 60, step: 5, defaultValue: 25, unit: "₹" }
+  ],
+  outputs: [
+    { label: "Gross Price Arbitrage", formula: "volume * (targetRate - sourceRate)", format: "currency" },
+    { label: "Freight & Toll Expense", formula: "distanceKm * freightPerKm", format: "currency" },
+    { label: "Net Realized Gain", formula: "(volume * (targetRate - sourceRate)) - (distanceKm * freightPerKm)", format: "currency", highlight: true }
+  ]
+}, null, 2)}
+\`\`\`
+
 | APMC Market Yard | District / State | Min Rate | Max Rate | Modal Price | Daily Arrivals |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 ${rates.map((r) => `| **${r.mandiName}** | ${r.district}, ${r.state} | ₹${r.minPrice.toLocaleString("en-IN")} | ₹${r.maxPrice.toLocaleString("en-IN")} | **₹${r.modalPrice.toLocaleString("en-IN")} / qtl** | ${r.arrivalTons ? `${r.arrivalTons} Tons` : "Active"} |`).join("\n")}
@@ -1924,13 +2165,15 @@ ${result.aiAdvisory ? `\n> **Advisory:** ${result.aiAdvisory}` : ""}`;
 
         return {
           success: true,
-          isArtifact: false,
+          isArtifact: true,
           artifactType: "mandi_arbitrage",
           title: `Mandi Price Spread: ${result.commodity} (${result.baseDistrict})`,
           summary,
+          spokenSummary,
           data: {
             ...result,
             content,
+            spokenSummary,
           },
         };
       },
@@ -1947,10 +2190,47 @@ ${result.aiAdvisory ? `\n> **Advisory:** ${result.aiAdvisory}` : ""}`;
         const result = await runSchemesSubAgent(params);
         const top = result.topRecommendation;
         const summary = `**Top Govt Scheme: ${top.schemeName}** provides **${top.potentialSavingsOrSubsidy}** for ${result.businessSector}. ${top.reason} File application on official MSME single-window portals.`;
+        const spokenSummary = `${top.schemeName} is your top matching government scheme, providing ${top.potentialSavingsOrSubsidy} for ${result.businessSector}. ${top.reason}`;
+
+        const rawSubsidy = top.potentialSavingsOrSubsidy || "Direct Grant";
+        const cleanSubsidyVal =
+          rawSubsidy.length > 25
+            ? rawSubsidy.match(/₹[\d,.]+\s*(?:Lakh|Cr|Crore|k)?/i)?.[0] ||
+              rawSubsidy.match(/\d+%\s*(?:Subsidy)?/i)?.[0] ||
+              "Collateral-Free Grant"
+            : rawSubsidy;
 
         const content = `### 🏛️ Government Schemes & Subsidies: ${result.businessSector}
 
 Live central and state government assistance programs matched to your business profile with verified subsidy thresholds and collateral-free lending options.
+
+\`\`\`cards
+${JSON.stringify({
+  title: "Government Scheme Allocation Highlights",
+  cards: [
+    { label: "Top Program", value: top.schemeName.slice(0, 16), status: "positive", subtext: "Official MSME Scheme" },
+    { label: "Max Subsidy", value: cleanSubsidyVal, status: "positive", subtext: rawSubsidy.length > 25 ? rawSubsidy.slice(0, 36) + "…" : "Direct capital grant" },
+    { label: "Matched Schemes", value: `${(result.schemes || []).length} Options`, status: "neutral", subtext: "Collateral-free eligible" },
+  ],
+}, null, 2)}
+\`\`\`
+
+\`\`\`calculator
+${JSON.stringify({
+  title: "MSME Capital Subsidy & Promoter Margin Simulator",
+  description: "Adjust project investment outlay and subsidy grant percentage to simulate net funding live",
+  inputs: [
+    { id: "capex", label: "Total Project Capex", type: "slider", min: 200000, max: 5000000, step: 50000, defaultValue: params.investmentAmount || 1000000, unit: "₹" },
+    { id: "subsidyRate", label: "Govt Subsidy / Grant %", type: "slider", min: 15, max: 50, step: 5, defaultValue: 35, unit: "%" },
+    { id: "marginRate", label: "Promoter Own Contribution", type: "slider", min: 5, max: 25, step: 5, defaultValue: 10, unit: "%" }
+  ],
+  outputs: [
+    { label: "Govt Capital Grant", formula: "capex * (subsidyRate / 100)", format: "currency", highlight: true },
+    { label: "Promoter Margin", formula: "capex * (marginRate / 100)", format: "currency" },
+    { label: "Net Bank Loan Required", formula: "capex - (capex * (subsidyRate / 100)) - (capex * (marginRate / 100))", format: "currency" }
+  ]
+}, null, 2)}
+\`\`\`
 
 | Scheme Name | Category | Max Assistance | Subsidy % | Collateral Free | Official Portal |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -1970,9 +2250,48 @@ ${(result.schemes || []).map((s) => `| **${s.name}** | ${s.category.toUpperCase(
           artifactType: "govt_schemes",
           title: `Govt Subsidies & Schemes: ${result.businessSector}`,
           summary,
+          spokenSummary,
           data: {
             ...result,
             content,
+            spokenSummary,
+          },
+        };
+      },
+    }),
+
+    // ─────────────────────────────────────────────────────────────
+    // 10. DYNAMIC ON-DEMAND CUSTOM RESEARCH SUB-AGENT
+    // ─────────────────────────────────────────────────────────────
+    runCustomResearchAgent: tool({
+      description:
+        "Spawns an on-demand specialized domain research sub-agent tab (e.g. Cold Storage Machinery, FSSAI Licensing, APEDA Food Export, Machinery Capex, Solar Rooftop) with real-time SerpApi web grounding, dynamic markdown dossier, KPI metrics, comparison tables, and interactive calculator.",
+      inputSchema: z.object({
+        tabTitle: z.string().describe("Concise tab title e.g. '❄️ Cold Storage', '📜 FSSAI Licensing', '⚡ Solar Rooftop', '📦 Packaging Machinery'"),
+        category: z.string().describe("Specific commercial sector or equipment domain to research"),
+        query: z.string().describe("Targeted search query for live SerpApi Google search"),
+        icon: z.enum(["factory", "shield", "truck", "package", "zap", "scale", "leaf", "cpu", "wrench", "coins"]).optional().default("factory").describe("Icon identifier for the tab header"),
+        investmentBudget: z.number().optional().describe("Optional investment capital or budget in INR"),
+        spokenSummary: z.string().optional().describe("1-sentence audio report for voice agent mode"),
+      }),
+      execute: async (params) => {
+        const result = await runCustomResearchSubAgent(params);
+        return {
+          success: true,
+          isArtifact: true,
+          isCustomSubAgent: true,
+          artifactType: "custom_research",
+          tabTitle: result.tabTitle,
+          icon: result.icon,
+          summary: result.summary,
+          spokenSummary: result.spokenSummary,
+          data: {
+            tabTitle: result.tabTitle,
+            category: result.category,
+            icon: result.icon,
+            content: result.markdown,
+            spokenSummary: result.spokenSummary,
+            sources: result.sources,
           },
         };
       },
@@ -2196,6 +2515,12 @@ export const TOOL_DEFINITIONS: Record<string, ToolMeta> = {
     icon: "landmark",
     formatSummary: (args) =>
       `Matched government subsidy programs for ${args?.businessSector || "MSME"}`,
+  },
+  runCustomResearchAgent: {
+    name: "runCustomResearchAgent",
+    icon: "layers",
+    formatSummary: (args) =>
+      `Researched ${args?.tabTitle || args?.category || "custom domain"} with SerpApi Google search`,
   },
   updateBusinessContext: {
     name: "updateBusinessContext",

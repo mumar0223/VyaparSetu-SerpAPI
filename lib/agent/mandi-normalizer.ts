@@ -5,9 +5,11 @@
  * 1. Comprehensive Hindi, Hinglish, Devanagari, and colloquial crop/commodity mapping
  *    to official canonical Agmarknet / data.gov.in names.
  * 2. Normalization for all 75 Uttar Pradesh districts and major Indian agricultural hubs.
- * 3. Real-time dynamic web search fallback (Exa / Neural Web Search) for live mandi prices
+ * 3. Real-time dynamic web search fallback (SerpApi Google Web Search) for live mandi prices
  *    when data.gov.in is slow, timing out, or has zero records for the day.
  */
+
+import { searchGoogleWeb } from "./serpapi-service";
 
 export interface NormalizedMandiQuery {
   rawCommodity?: string;
@@ -568,7 +570,7 @@ export function normalizeDistrictAndState(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 4. LIVE REAL-TIME WEB / EXA SEARCH FALLBACK
+// 4. LIVE REAL-TIME WEB / SERPAPI SEARCH FALLBACK
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -593,122 +595,55 @@ export async function searchLiveMandiWebRates(params: {
   const query = `${location} APMC mandi bhav today ${commodity} price per quintal rate`;
 
   try {
-    const exaKey = process.env.EXA_API_KEY;
-    if (exaKey) {
-      const res = await fetch("https://api.exa.ai/search", {
-        method: "POST",
-        headers: {
-          "x-api-key": exaKey,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          query,
-          numResults: 4,
-          useAutoprompt: true,
-          contents: { text: true },
-        }),
-        signal: AbortSignal.timeout(8000),
-      });
-
-      if (res.ok) {
-        const exaData = await res.json();
-        const results = exaData.results || [];
-
-        if (results.length > 0) {
-          const priceMatches: number[] = [];
-          for (const item of results) {
-            const text = (item.text || item.title || "").replace(/,/g, "");
-            const matches = text.match(/(?:₹|rs\.?|inr)?\s*([1-9][0-9]{3,4})\s*(?:\/|\s*per)?\s*(?:qtl|quintal|क्विंटल)?/gi);
-            if (matches) {
-              for (const m of matches) {
-                const num = parseInt(m.replace(/[^0-9]/g, ""), 10);
-                if (num >= 800 && num <= 30000) {
-                  priceMatches.push(num);
-                }
-              }
+    const serpResults = await searchGoogleWeb(query, 6);
+    if (serpResults && serpResults.length > 0) {
+      const priceMatches: number[] = [];
+      for (const item of serpResults) {
+        const text = `${item.title} ${item.snippet}`.replace(/,/g, "");
+        const matches = text.match(/(?:₹|rs\.?|inr)?\s*([1-9][0-9]{3,4})\s*(?:\/|\s*per)?\s*(?:qtl|quintal|क्विंटल)?/gi);
+        if (matches) {
+          for (const m of matches) {
+            const num = parseInt(m.replace(/[^0-9]/g, ""), 10);
+            if (num >= 800 && num <= 30000) {
+              priceMatches.push(num);
             }
           }
-
-          let modal = priceMatches.length > 0 ? priceMatches[0] : 0;
-          let minP = modal > 0 ? Math.round(modal * 0.94) : 0;
-          let maxP = modal > 0 ? Math.round(modal * 1.06) : 0;
-
-          if (priceMatches.length > 1) {
-            minP = Math.min(...priceMatches.slice(0, 5));
-            maxP = Math.max(...priceMatches.slice(0, 5));
-            modal = Math.round((minP + maxP) / 2);
-          }
-
-          const primaryMarket = market || `${location} Central APMC Yard`;
-          const records: FormattedMandiRecord[] = [
-            {
-              state: state || "India",
-              district: district || location,
-              market: primaryMarket,
-              commodity: commodity,
-              variety: "FAQ / Live Spot",
-              arrivalDate: todayStr,
-              modalPricePerQuintal: modal > 0 ? `₹${modal}` : "Market Trading Active",
-              priceRange: minP > 0 && maxP > 0 ? `₹${minP} - ₹${maxP} / Quintal` : "Live Quotes in Range",
-            },
-          ];
-
-          return {
-            success: true,
-            source: "Live APMC Web Grounding (Exa Neural Web Search)",
-            totalMarkets: records.length,
-            records,
-          };
-        }
-      }
-    }
-
-    const ddgQuery = encodeURIComponent(`${location} mandi rate today ${commodity} APMC per quintal`);
-    const ddgRes = await fetch(`https://html.duckduckgo.com/html/?q=${ddgQuery}`, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-      },
-      signal: AbortSignal.timeout(6000),
-    });
-
-    if (ddgRes.ok) {
-      const html = await ddgRes.text();
-      const snippetPrices: number[] = [];
-      const cleanText = html.replace(/<[^>]+>/g, " ").replace(/,/g, "");
-      const matches = cleanText.match(/(?:₹|rs\.?|inr)?\s*([1-9][0-9]{3,4})\s*(?:\/|\s*per)?\s*(?:qtl|quintal|क्विंटल)?/gi);
-      if (matches) {
-        for (const m of matches) {
-          const num = parseInt(m.replace(/[^0-9]/g, ""), 10);
-          if (num >= 800 && num <= 30000) snippetPrices.push(num);
         }
       }
 
-      if (snippetPrices.length > 0) {
-        const modal = snippetPrices[0];
-        const minP = Math.round(modal * 0.94);
-        const maxP = Math.round(modal * 1.06);
+      let modal = priceMatches.length > 0 ? priceMatches[0] : 0;
+      let minP = modal > 0 ? Math.round(modal * 0.94) : 0;
+      let maxP = modal > 0 ? Math.round(modal * 1.06) : 0;
 
-        return {
-          success: true,
-          source: "Live APMC Web Grounding (Web Engine)",
-          totalMarkets: 1,
-          records: [
-            {
-              state: state || "India",
-              district: district || location,
-              market: market || `${location} APMC Mandi`,
-              commodity,
-              variety: "FAQ Standard",
-              arrivalDate: todayStr,
-              modalPricePerQuintal: `₹${modal}`,
-              priceRange: `₹${minP} - ₹${maxP} / Quintal`,
-            },
-          ],
-        };
+      if (priceMatches.length > 1) {
+        minP = Math.min(...priceMatches.slice(0, 5));
+        maxP = Math.max(...priceMatches.slice(0, 5));
+        modal = Math.round((minP + maxP) / 2);
       }
+
+      const primaryMarket = market || `${location} Central APMC Yard`;
+      const records: FormattedMandiRecord[] = [
+        {
+          state: state || "India",
+          district: district || location,
+          market: primaryMarket,
+          commodity: commodity,
+          variety: "FAQ / Live Spot",
+          arrivalDate: todayStr,
+          modalPricePerQuintal: modal > 0 ? `₹${modal}` : "Market Trading Active",
+          priceRange: minP > 0 && maxP > 0 ? `₹${minP} - ₹${maxP} / Quintal` : "Live Quotes in Range",
+        },
+      ];
+
+      return {
+        success: true,
+        source: "Live APMC Grounding (SerpApi Google Search)",
+        totalMarkets: records.length,
+        records,
+      };
     }
   } catch (err: any) {
-    console.warn("[searchLiveMandiWebRates] web grounding error:", err?.message);
+    console.warn("[searchLiveMandiWebRates] SerpApi grounding error:", err?.message);
   }
 
   return {

@@ -39,7 +39,9 @@ import {
   Coins,
   Store,
   CreditCard,
+  Compass,
 } from "lucide-react";
+import { SwarmTabsCard } from "./swarm-tabs-card";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -91,6 +93,7 @@ export interface ArtifactPayload {
     | "competitors"
     | "emi_calculator"
     | "credit"
+    | "swarm_dossier"
     | (string & {});
   title?: string;
   summary?: string;
@@ -316,6 +319,7 @@ export function ArtifactModal({
         "competitors",
         "emi_calculator",
         "credit",
+        "swarm_dossier",
       ].includes(artifact.artifactType)
     ) {
       toast.success(
@@ -547,11 +551,12 @@ export function ArtifactModal({
               {(artifact.artifactType === "swot_matrix" || artifact.artifactType === "swot") && <Target className="size-5" />}
               {(artifact.artifactType === "catchment_radar" || artifact.artifactType === "competitors") && <Store className="size-5" />}
               {(artifact.artifactType === "emi_calculator" || artifact.artifactType === "credit") && <CreditCard className="size-5" />}
+              {artifact.artifactType === "swarm_dossier" && <Compass className="size-5" />}
               {artifact.artifactType === "delete_record" && <AlertTriangle className="size-5 text-rose-500" />}
               {![
                 "budget", "chart", "expense", "transaction", "saving_goal", "debt", "form",
                 "document", "mandi_arbitrage", "mandi", "govt_schemes", "schemes",
-                "swot_matrix", "swot", "catchment_radar", "competitors", "emi_calculator", "credit", "delete_record"
+                "swot_matrix", "swot", "catchment_radar", "competitors", "emi_calculator", "credit", "swarm_dossier", "delete_record"
               ].includes(artifact.artifactType) && <FileText className="size-5" />}
             </span>
             <div className="min-w-0 flex-1">
@@ -1101,8 +1106,15 @@ export function ArtifactModal({
             </div>
           )}
 
+          {/* 6c. UNIFIED MULTI-DOMAIN SWARM DOSSIER */}
+          {(artifact.artifactType === "swarm_dossier" || (Array.isArray(formData.toolCalls) && formData.toolCalls.length > 0)) && (
+            <div className="w-full space-y-4">
+              <SwarmTabsCard toolCalls={formData.toolCalls || artifact.data?.toolCalls} />
+            </div>
+          )}
+
           {/* 6b. DYNAMIC SWARM DOMAIN RESEARCH ARTIFACTS */}
-          {[
+          {artifact.artifactType !== "swarm_dossier" && !formData.toolCalls && [
             "mandi_arbitrage",
             "mandi",
             "govt_schemes",
@@ -1917,7 +1929,7 @@ export function ArtifactModal({
             disabled={isSubmitting}
             className="px-4 py-2 rounded-xl text-xs font-semibold text-muted-foreground hover:bg-cream dark:hover:bg-muted transition-colors cursor-pointer"
           >
-            {["chart", "document", "mandi_arbitrage", "mandi", "govt_schemes", "schemes", "swot_matrix", "swot", "catchment_radar", "competitors", "emi_calculator", "credit"].includes(artifact.artifactType) ? "Close" : "Discard"}
+            {["chart", "document", "mandi_arbitrage", "mandi", "govt_schemes", "schemes", "swot_matrix", "swot", "catchment_radar", "competitors", "emi_calculator", "credit", "swarm_dossier"].includes(artifact.artifactType) ? "Close" : "Discard"}
           </button>
           <button
             type="button"
@@ -1932,7 +1944,7 @@ export function ArtifactModal({
           >
             <Check className="size-4 stroke-[2.5]" />
             <span>
-              {["chart", "document", "mandi_arbitrage", "mandi", "govt_schemes", "schemes", "swot_matrix", "swot", "catchment_radar", "competitors", "emi_calculator", "credit"].includes(artifact.artifactType)
+              {["chart", "document", "mandi_arbitrage", "mandi", "govt_schemes", "schemes", "swot_matrix", "swot", "catchment_radar", "competitors", "emi_calculator", "credit", "swarm_dossier"].includes(artifact.artifactType)
                 ? "Done"
                 : isSubmitting
                   ? "Saving..."

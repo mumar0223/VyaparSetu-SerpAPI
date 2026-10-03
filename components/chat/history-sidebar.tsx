@@ -108,8 +108,8 @@ export function HistorySidebar({
       {/* Top Header */}
       <div className="flex flex-col gap-2 p-3 border-b border-sage/20 dark:border-border">
         <div className="flex h-9 items-center justify-between gap-2">
-          <Link
-            href="/"
+          <button
+            type="button"
             onClick={() => {
               onNewChat();
               if (isMobileSheet) onToggle();
@@ -123,7 +123,7 @@ export function HistorySidebar({
           >
             <Plus className="size-4 text-forest dark:text-mint" />
             <span>{t("history.newChat", "New chat")}</span>
-          </Link>
+          </button>
 
           <button
             onClick={onToggle}
@@ -313,7 +313,8 @@ export function HistorySidebar({
       {/* ── Desktop Inline Collapsible History Sidebar (>= 1024px, Left-Docked) ── */}
       <aside
         className={cn(
-          "hidden lg:flex shrink-0 flex-col border-r border-sage/20 dark:border-border bg-white/35 dark:bg-card/35 h-full transition-[width] duration-300 ease-in-out select-none overflow-hidden font-sans",
+          "hidden lg:flex shrink-0 flex-col border-r border-sage/20 dark:border-border bg-white/35 dark:bg-card/35 h-full select-none overflow-hidden font-sans",
+          mounted && "transition-[width] duration-300 ease-in-out",
           isOpen ? "w-[260px]" : "w-0 border-r-0"
         )}
       >

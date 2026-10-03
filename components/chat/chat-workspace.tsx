@@ -51,8 +51,21 @@ import {
   saveBusinessProfile,
   clearBusinessProfile,
   saveEnterpriseIntelligence,
+  saveEnterpriseRecord,
+  getEnterpriseRecords,
   type BusinessProfile,
+  type EnterpriseRecord,
 } from "@/lib/storage/indexed-db";
+import {
+  getPersistedSidebarOpen,
+  persistSidebarOpen,
+  getCachedConversations,
+  setCachedConversations,
+  getCachedMessages,
+  setCachedMessages,
+  clearCachedMessages,
+  CONVERSATIONS_UPDATED_EVENT,
+} from "@/lib/sidebar-state";
 import { MapPin, ChevronDown, Check, RefreshCw, Edit2 } from "lucide-react";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import type { SupportedLanguageCode } from "@/lib/agent/chat-config";
@@ -85,12 +98,29 @@ export function ChatWorkspace({
   const [activeChatId, setActiveChatId] = useState<string | null>(
     initialChatId || null,
   );
-  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
+  const chatCache = useRef<Map<string, ChatMessage[]>>(new Map());
+  const [conversations, setConversations] = useState<ConversationSummary[]>(
+    () => getCachedConversations() || [],
+  );
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpenRaw] = useState(() => getPersistedSidebarOpen());
+  const setIsSidebarOpen = useCallback((open: boolean | ((prev: boolean) => boolean)) => {
+    setIsSidebarOpenRaw((prev) => {
+      const next = typeof open === "function" ? open(prev) : open;
+      persistSidebarOpen(next);
+      return next;
+    });
+  }, []);
   const [activeView, setActiveView] = useState<"chat" | "enterprise">("chat");
   const [isPersonaDialogOpen, setIsPersonaDialogOpen] = useState(false);
+  const [chatLoadError, setChatLoadError] = useState<string | null>(null);
+  const currentLoadedChatIdRef = useRef<string | null>(initialChatId || null);
+  const messagesRef = useRef<ChatMessage[]>(messages);
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // Active Business Profile Persona & Location Memory (Dexie / IndexedDB)
   const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
@@ -114,11 +144,8 @@ export function ChatWorkspace({
     };
   }, []);
 
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      setIsSidebarOpen(window.innerWidth >= 1024);
-    }
-  }, []);
+  // Sidebar open state is now read from localStorage via getPersistedSidebarOpen()
+  // so no reset effect is needed — it persists across page navigations.
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -147,21 +174,22 @@ export function ChatWorkspace({
     try {
       const idbList = await idbGetConversations();
       if (idbList.length > 0) {
-        setConversations(
-          idbList.map((c) => ({
-            id: c.id,
-            title: c.title,
-            pinned: c.pinned,
-            createdAt: new Date(c.createdAt).toISOString(),
-            updatedAt: new Date(c.updatedAt).toISOString(),
-          })),
-        );
+        const mapped = idbList.map((c) => ({
+          id: c.id,
+          title: c.title,
+          pinned: c.pinned,
+          createdAt: new Date(c.createdAt).toISOString(),
+          updatedAt: new Date(c.updatedAt).toISOString(),
+        }));
+        setCachedConversations(mapped);
+        setConversations(mapped);
       } else {
         // Fallback to in-memory server chatStore if present
         const res = await fetch("/api/chats").catch(() => null);
         if (res && res.ok) {
           const data = await res.json();
           const serverList = data.conversations || [];
+          setCachedConversations(serverList);
           setConversations(serverList);
           for (const s of serverList) {
             await idbSaveConversation({
@@ -179,9 +207,158 @@ export function ChatWorkspace({
     }
   }, []);
 
+  // Instant restore from module-level cache, then listen for updates & refresh if needed
   useEffect(() => {
-    fetchConversations();
+    const handleConversationsUpdated = (e: any) => {
+      if (e.detail && Array.isArray(e.detail)) {
+        setConversations(e.detail);
+      }
+    };
+    window.addEventListener(CONVERSATIONS_UPDATED_EVENT, handleConversationsUpdated);
+
+    if (!getCachedConversations() || getCachedConversations()!.length === 0) {
+      fetchConversations();
+    }
+
+    return () => {
+      window.removeEventListener(CONVERSATIONS_UPDATED_EVENT, handleConversationsUpdated);
+    };
   }, [fetchConversations]);
+
+  const persistToolResultToEnterprise = useCallback(
+    (
+      chatId: string,
+      chatTitle: string,
+      toolName: string,
+      result: any,
+      summary?: string,
+    ) => {
+      if (!result || !chatId) return;
+      const now = Date.now();
+      const extractedMarkdown =
+        result.data?.content ||
+        result.content ||
+        result.data?.markdown ||
+        result.markdown ||
+        result.data?.dossier ||
+        (typeof result === "string" ? result : undefined);
+
+      if (toolName === "runSWOTScan") {
+        const swot = result.swot || result.data || result;
+        const md = extractedMarkdown || (typeof swot?.content === "string" ? swot.content : undefined);
+        saveEnterpriseIntelligence({
+          swot,
+          summary: summary || result.summary,
+          awakenedDomains: ["swot"],
+        }).catch(() => {});
+        saveEnterpriseRecord({
+          id: `${chatId}_swot`,
+          conversationId: chatId,
+          chatTitle,
+          domain: "swot",
+          title: "SWOT Strategic Radar Scan",
+          summary: summary || result.summary || "Live strategic SWOT assessment",
+          data: swot,
+          markdown: md,
+          timestamp: now,
+        }).catch(() => {});
+      } else if (toolName === "evaluateGovtSchemes") {
+        const schemes = result.schemes || result.data || result;
+        const md = extractedMarkdown || (typeof schemes?.content === "string" ? schemes.content : undefined);
+        saveEnterpriseIntelligence({
+          schemes,
+          summary: summary || result.summary,
+          awakenedDomains: ["schemes"],
+        }).catch(() => {});
+        saveEnterpriseRecord({
+          id: `${chatId}_schemes`,
+          conversationId: chatId,
+          chatTitle,
+          domain: "schemes",
+          title: "Government Schemes & Capital Subsidies",
+          summary: summary || result.summary || "Central & State MSME subsidy schemes",
+          data: schemes,
+          markdown: md,
+          timestamp: now,
+        }).catch(() => {});
+      } else if (toolName === "getMandiArbitrage" || toolName === "getMandiRates") {
+        const mandi = result.mandi || result.commodities || result.data || result;
+        const md = extractedMarkdown || (typeof mandi?.content === "string" ? mandi.content : undefined);
+        saveEnterpriseIntelligence({
+          mandi,
+          summary: summary || result.summary,
+          awakenedDomains: ["mandi"],
+        }).catch(() => {});
+        saveEnterpriseRecord({
+          id: `${chatId}_mandi`,
+          conversationId: chatId,
+          chatTitle,
+          domain: "mandi",
+          title: "APMC Mandi Spot Rates & Arbitrage",
+          summary: summary || result.summary || "Wholesale commodity arrivals and spot prices",
+          data: mandi,
+          markdown: md,
+          timestamp: now,
+        }).catch(() => {});
+      } else if (
+        toolName === "scanCatchmentRadar" ||
+        toolName === "searchCompetitors"
+      ) {
+        const competitors = result.competitors || result.data || result;
+        const md = extractedMarkdown || (typeof competitors?.content === "string" ? competitors.content : undefined);
+        saveEnterpriseIntelligence({
+          competitors,
+          summary: summary || result.summary,
+          awakenedDomains: ["competitors"],
+        }).catch(() => {});
+        saveEnterpriseRecord({
+          id: `${chatId}_competitors`,
+          conversationId: chatId,
+          chatTitle,
+          domain: "competitors",
+          title: "Google Maps Competitor Density Radar",
+          summary: summary || result.summary || "Local competitor ratings, prices, and positioning",
+          data: competitors,
+          markdown: md,
+          timestamp: now,
+        }).catch(() => {});
+      } else if (toolName === "evaluateCreditAndEMI") {
+        const credit = result.credit || result.data || result;
+        const md = extractedMarkdown || (typeof credit?.content === "string" ? credit.content : undefined);
+        saveEnterpriseIntelligence({
+          credit,
+          summary: summary || result.summary,
+          awakenedDomains: ["credit"],
+        }).catch(() => {});
+        saveEnterpriseRecord({
+          id: `${chatId}_credit`,
+          conversationId: chatId,
+          chatTitle,
+          domain: "credit",
+          title: "Credit Readiness & Debt Service Coverage",
+          summary: summary || result.summary || "Bureau score estimation and borrowing headroom",
+          data: credit,
+          markdown: md,
+          timestamp: now,
+        }).catch(() => {});
+      } else if (toolName === "runCustomResearchAgent") {
+        const custom = result.data || result;
+        const md = extractedMarkdown || result.data?.markdown || result.markdown;
+        saveEnterpriseRecord({
+          id: `${chatId}_custom`,
+          conversationId: chatId,
+          chatTitle,
+          domain: "custom",
+          title: result.tabTitle || result.title || "Custom Grounded Intelligence",
+          summary: summary || result.summary || "Specialized autonomous sub-agent analysis",
+          data: custom,
+          markdown: md,
+          timestamp: now,
+        }).catch(() => {});
+      }
+    },
+    [],
+  );
 
   // ── Voice Agent Mode State & Live Agent Orchestrator ──
   const [isVoiceMode, setIsVoiceMode] = useState(false);
@@ -281,6 +458,7 @@ export function ChatWorkspace({
         );
         if (currentChatId) {
           chatCache.current.set(currentChatId, next);
+          setCachedMessages(currentChatId, next);
         }
         return next;
       });
@@ -308,6 +486,22 @@ export function ChatWorkspace({
             createdAt: startedAt + 1,
           }).catch(() => {});
         }
+
+        // Save tool outputs from voice turn to Enterprise Intelligence & Records
+        if (turn.toolCalls && turn.toolCalls.length > 0) {
+          const chatTitle =
+            conversations.find((c) => c.id === currentChatId)?.title ||
+            "Live Voice Session";
+          for (const tc of turn.toolCalls) {
+            persistToolResultToEnterprise(
+              currentChatId,
+              chatTitle,
+              tc.toolName,
+              tc.result,
+              (tc as any).summary,
+            );
+          }
+        }
       }
 
       fetchConversations();
@@ -322,8 +516,6 @@ export function ChatWorkspace({
     const targetCode = (language && LANGUAGE_TO_VOICE_CODE[language]) || "en-IN";
     liveAgentSetLanguageRef.current(targetCode);
   }, [language]);
-
-  const chatCache = useRef<Map<string, ChatMessage[]>>(new Map());
   const showScrollBottomRef = useRef(showScrollBottom);
   showScrollBottomRef.current = showScrollBottom;
 
@@ -359,9 +551,14 @@ export function ChatWorkspace({
     async (id: string) => {
       try {
         chatCache.current.delete(id);
+        clearCachedMessages(id);
         await idbDeleteConversation(id);
         fetch(`/api/chats/${id}`, { method: "DELETE" }).catch(() => {});
-        setConversations((prev) => prev.filter((c) => c.id !== id));
+        setConversations((prev) => {
+          const next = prev.filter((c) => c.id !== id);
+          setCachedConversations(next);
+          return next;
+        });
         if (activeChatId === id) {
           setActiveChatId(null);
           setMessages([]);
@@ -567,6 +764,7 @@ export function ChatWorkspace({
           });
           setMessages(loaded);
           chatCache.current.set(currentChatId, loaded);
+          setCachedMessages(currentChatId, loaded);
         } else {
           const res = await fetch(`/api/chats/${currentChatId}`);
           if (res.ok) {
@@ -574,6 +772,7 @@ export function ChatWorkspace({
             if (data?.conversation?.messages && data.conversation.messages.length > 0) {
               setMessages(data.conversation.messages);
               chatCache.current.set(currentChatId, data.conversation.messages);
+              setCachedMessages(currentChatId, data.conversation.messages);
             }
           }
         }
@@ -609,39 +808,79 @@ export function ChatWorkspace({
     }
   }, [handleStartVoiceSession]);
 
-  // 2. Load Active Conversation Messages if initialChatId provided
-  useEffect(() => {
-    if (!initialChatId) {
-      setActiveChatId(null);
-      setMessages([]);
-      setIsInitialLoading(false);
-      return;
-    }
+  // ── Unified URL / Chat Loader ──
+  const loadChatById = useCallback(
+    async (id: string | null, options?: { skipPushState?: boolean }) => {
+      setChatLoadError(null);
 
-    if (chatCache.current.has(initialChatId)) {
-      setActiveChatId(initialChatId);
-      setMessages(chatCache.current.get(initialChatId)!);
-      setIsInitialLoading(false);
-      return;
-    }
-
-    let isMounted = true;
-    const loadConversation = async () => {
-      const chatId = decodeURIComponent(initialChatId).trim();
-      setMessages([]);
-      setIsInitialLoading(true);
-      try {
-        // 1. Check local Dexie IndexedDB first (0ms instant restore, zero 404 on server reboots)
-        let localMessages = await idbGetMessages(chatId);
-        if (!localMessages || localMessages.length === 0) {
-          // Cold reload safety: small 80ms tick in case IndexedDB connection is opening
-          await new Promise((r) => setTimeout(r, 80));
-          localMessages = await idbGetMessages(chatId);
+      if (!id) {
+        if (abortControllerRef.current) {
+          abortControllerRef.current.abort();
+          abortControllerRef.current = null;
         }
+        setIsLoading(false);
+        currentLoadedChatIdRef.current = null;
+        setActiveChatId(null);
+        setMessages([]);
+        setChatLoadError(null);
+        setIsInitialLoading(false);
+        if (!options?.skipPushState && typeof window !== "undefined" && window.location.pathname !== "/") {
+          window.history.pushState(null, "", "/");
+        }
+        return;
+      }
 
-        if (localMessages && localMessages.length > 0 && isMounted) {
-          setActiveChatId(chatId);
-          const loaded = localMessages.map((m: any) => {
+      const cleanId = decodeURIComponent(id).trim();
+
+      // Only skip if actively streaming to this exact chat
+      if (currentLoadedChatIdRef.current === cleanId && abortControllerRef.current) {
+        if (!options?.skipPushState && typeof window !== "undefined" && window.location.pathname !== `/c/${cleanId}`) {
+          window.history.pushState(null, "", `/c/${cleanId}`);
+        }
+        return;
+      }
+
+      // If already loaded on screen with messages, avoid redundant re-fetch
+      if (currentLoadedChatIdRef.current === cleanId && messagesRef.current.length > 0 && !abortControllerRef.current) {
+        if (!options?.skipPushState && typeof window !== "undefined" && window.location.pathname !== `/c/${cleanId}`) {
+          window.history.pushState(null, "", `/c/${cleanId}`);
+        }
+        return;
+      }
+
+      // Switching away to another chat: abort any pending request & unblock input immediately
+      if (currentLoadedChatIdRef.current !== cleanId) {
+        if (abortControllerRef.current) {
+          abortControllerRef.current.abort();
+          abortControllerRef.current = null;
+        }
+        setIsLoading(false);
+      }
+
+      currentLoadedChatIdRef.current = cleanId;
+      setActiveChatId(cleanId);
+      if (!options?.skipPushState && typeof window !== "undefined" && window.location.pathname !== `/c/${cleanId}`) {
+        window.history.pushState(null, "", `/c/${cleanId}`);
+      }
+
+      // 0. Check in-memory module cache first for instantaneous 0ms display
+      const memoryCached = getCachedMessages(cleanId) || chatCache.current.get(cleanId);
+      if (memoryCached && memoryCached.length > 0) {
+        chatCache.current.set(cleanId, memoryCached);
+        setCachedMessages(cleanId, memoryCached);
+        setMessages(memoryCached);
+        setIsInitialLoading(false);
+        return;
+      }
+
+      setIsInitialLoading(true);
+
+      try {
+        // 1. Check local Dexie IndexedDB
+        const localMessages = await idbGetMessages(cleanId);
+
+        if (localMessages && localMessages.length > 0) {
+          const loaded: ChatMessage[] = localMessages.map((m: any) => {
             let duration: number | undefined =
               typeof m.thoughtDurationSeconds === "number" && m.thoughtDurationSeconds > 0
                 ? m.thoughtDurationSeconds
@@ -668,18 +907,22 @@ export function ChatWorkspace({
               createdAt: m.createdAt ? new Date(m.createdAt) : new Date(),
             };
           });
-          chatCache.current.set(chatId, loaded);
+          chatCache.current.set(cleanId, loaded);
+          setCachedMessages(cleanId, loaded);
           setMessages(loaded);
           setIsInitialLoading(false);
           return;
         }
 
-        // 2. Fallback to server API if local DB was empty
-        const res = await fetch(`/api/chats/${chatId}`);
-        if (res.ok && isMounted) {
+        // 2. Fetch from server API
+        const res = await fetch(`/api/chats/${cleanId}`).catch(() => null);
+        if (res && res.ok) {
           const data = await res.json();
-          if (data.conversation && Array.isArray(data.conversation.messages)) {
-            setActiveChatId(data.conversation.id);
+          if (
+            data.conversation &&
+            Array.isArray(data.conversation.messages) &&
+            data.conversation.messages.length > 0
+          ) {
             const loaded = data.conversation.messages.map((m: any) => {
               let duration: number | undefined =
                 typeof m.thoughtDurationSeconds === "number" && m.thoughtDurationSeconds > 0
@@ -696,7 +939,7 @@ export function ChatWorkspace({
                   if (!isNaN(num) && num > 0) duration = num;
                 }
               }
-              const item = {
+              const item: ChatMessage = {
                 id: m.id,
                 role: m.role,
                 content: m.content,
@@ -707,10 +950,9 @@ export function ChatWorkspace({
                 createdAt: m.createdAt ? new Date(m.createdAt) : new Date(),
               };
 
-              // Backfill local IndexedDB
               idbSaveMessage({
                 id: m.id,
-                conversationId: chatId,
+                conversationId: cleanId,
                 role: m.role,
                 content: m.content,
                 thinking: m.thinking,
@@ -721,186 +963,90 @@ export function ChatWorkspace({
 
               return item;
             });
-            chatCache.current.set(data.conversation.id, loaded);
+
+            chatCache.current.set(cleanId, loaded);
+            setCachedMessages(cleanId, loaded);
             setMessages(loaded);
             setIsInitialLoading(false);
             return;
           }
         }
 
-        // 3. If neither local messages nor remote messages exist, verify if conversation itself exists
-        const convExists = await idbGetConversation(chatId);
-        if (!convExists && isMounted) {
-          console.warn(`Conversation ${chatId} not found locally or remotely. Redirecting to home.`);
-          router.replace("/");
-        }
-      } catch (err) {
-        console.error("Failed to load conversation:", err);
-      } finally {
-        if (isMounted) setIsInitialLoading(false);
-      }
-    };
-
-    loadConversation();
-    return () => {
-      isMounted = false;
-    };
-  }, [initialChatId, router]);
-
-  // 3. Start New Chat (Instant 0ms in-memory state change, zero page reload)
-  const handleNewChat = useCallback(() => {
-    setActiveView("chat");
-    if (isVoiceMode) {
-      liveAgent.disconnect();
-      if (activeChatId && messages.length === 0) {
-        handleDeleteChat(activeChatId);
-      }
-      setIsVoiceMode(false);
-    }
-    liveAgent.setLiveArtifact(null);
-    setActiveChatId(null);
-    setMessages([]);
-    setIsInitialLoading(false);
-    window.history.pushState(null, "", "/");
-  }, [isVoiceMode, liveAgent, activeChatId, messages.length, handleDeleteChat]);
-
-  // 4. Select existing chat from history (Instant 0ms in-memory load, zero page reload)
-  const handleSelectChat = useCallback(
-    async (id: string) => {
-      setActiveView("chat");
-      // Allow re-selecting if messages are empty to recover from blank loads
-      if (id === activeChatId && messages.length > 0 && !isVoiceMode) return;
-
-      if (isVoiceMode) {
-        liveAgent.disconnect();
-        if (activeChatId && messages.length === 0) {
-          handleDeleteChat(activeChatId);
-        }
-        setIsVoiceMode(false);
-      }
-      liveAgent.setLiveArtifact(null);
-
-      setActiveChatId(id);
-      window.history.pushState(null, "", `/c/${id}`);
-
-      // If cached in RAM: Instant 0ms load!
-      if (chatCache.current.has(id)) {
-        setMessages(chatCache.current.get(id)!);
-        return;
-      }
-
-      // Check Client IndexedDB first
-      try {
-        let idbMsgs = await idbGetMessages(id);
-        if (idbMsgs.length === 0) {
-          await new Promise((r) => setTimeout(r, 80));
-          idbMsgs = await idbGetMessages(id);
-        }
-        if (idbMsgs.length > 0) {
-          const loaded: ChatMessage[] = idbMsgs.map((m) => {
-            let duration: number | undefined = undefined;
-            if (m.thinking) {
-              try {
-                const parsed = JSON.parse(m.thinking);
-                if (typeof parsed?.durationSeconds === "number") {
-                  duration = parsed.durationSeconds;
-                }
-              } catch {
-                const num = Number(m.thinking);
-                if (!isNaN(num) && num > 0) duration = num;
-              }
-            }
-            return {
-              id: m.id,
-              role: m.role,
-              content: m.content,
-              thinking: m.thinking,
-              toolCalls: m.toolCalls,
-              files: Array.isArray(m.files) ? m.files : [],
-              thoughtDurationSeconds: duration,
-              createdAt: new Date(m.createdAt),
-            };
-          });
-          chatCache.current.set(id, loaded);
-          setMessages(loaded);
+        // 3. Check if empty conversation exists in IndexedDB (freshly created session)
+        const convExists = await idbGetConversation(cleanId).catch(() => null);
+        if (convExists) {
+          setMessages([]);
           setIsInitialLoading(false);
           return;
         }
-      } catch (e) {
-        console.warn("IndexedDB load error:", e);
-      }
 
-      try {
-        const res = await fetch(`/api/chats/${id}`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data.conversation) {
-            const loaded = (data.conversation.messages || []).map((m: any) => {
-              let duration: number | undefined = undefined;
-              if (m.thinking) {
-                try {
-                  const parsed = JSON.parse(m.thinking);
-                  if (typeof parsed?.durationSeconds === "number") {
-                    duration = parsed.durationSeconds;
-                  }
-                } catch {
-                  const num = Number(m.thinking);
-                  if (!isNaN(num) && num > 0) duration = num;
-                }
-              }
-              if (duration === undefined && Array.isArray(m.toolCalls) && m.toolCalls.length > 0) {
-                duration = 1;
-              }
-              const item = {
-                id: m.id,
-                role: m.role,
-                content: m.content,
-                thinking: m.thinking,
-                toolCalls: m.toolCalls,
-                files: Array.isArray(m.files) ? m.files : [],
-                thoughtDurationSeconds: duration,
-                createdAt: m.createdAt,
-              };
-
-              // Backfill local IndexedDB
-              idbSaveMessage({
-                id: m.id,
-                conversationId: id,
-                role: m.role,
-                content: m.content,
-                thinking: m.thinking,
-                toolCalls: m.toolCalls,
-                files: Array.isArray(m.files) ? m.files : [],
-                createdAt: m.createdAt ? new Date(m.createdAt).getTime() : Date.now(),
-              }).catch(() => {});
-
-              return item;
-            });
-            chatCache.current.set(data.conversation.id, loaded);
-            setMessages(loaded);
-          }
-        }
+        // 4. Invalid or non-existent conversation ID!
+        setChatLoadError("Could not load this conversation");
+        setMessages([]);
       } catch (err) {
-        console.error("Failed to select chat:", err);
+        console.error("Failed to load conversation:", err);
+        setChatLoadError("Could not load this conversation");
+        setMessages([]);
       } finally {
         setIsInitialLoading(false);
       }
     },
-    [activeChatId, isVoiceMode, liveAgent, messages.length, handleDeleteChat],
+    [],
   );
 
-  // ── Browser Back / Forward (popstate) Support ──
+  // ── Sync with Route / Pathname (handles Back, Forward, Link clicks, pushState) ──
   useEffect(() => {
-    const onPopState = () => {
-      const currentPath = window.location.pathname;
-      if (currentPath === "/" || currentPath === "/ai-saathi" || currentPath === "/dashboard") {
+    if (!pathname) return;
+
+    if (
+      pathname === "/" ||
+      pathname === "/ai-saathi" ||
+      pathname === "/dashboard"
+    ) {
+      if (currentLoadedChatIdRef.current !== null) {
         if (isVoiceMode) {
           liveAgent.disconnect();
           setIsVoiceMode(false);
         }
-        setActiveChatId(null);
-        setMessages([]);
-        setIsInitialLoading(false);
+        loadChatById(null, { skipPushState: true });
+      }
+    } else if (
+      pathname.startsWith("/c/") ||
+      pathname.startsWith("/ai-saathi/c/") ||
+      pathname.startsWith("/dashboard/c/")
+    ) {
+      const id = pathname
+        .replace(/^\/(?:ai-saathi|dashboard)?\/?c\//, "")
+        .replace(/\/+$/, "")
+        .split("?")[0];
+      if (id && id !== currentLoadedChatIdRef.current) {
+        loadChatById(id, { skipPushState: true });
+      }
+    }
+  }, [pathname, isVoiceMode, liveAgent, loadChatById]);
+
+  // ── Browser Back / Forward (popstate) Fallback Listener ──
+  useEffect(() => {
+    const onPopState = () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+      setIsLoading(false);
+
+      const currentPath = window.location.pathname;
+      if (
+        currentPath === "/" ||
+        currentPath === "/ai-saathi" ||
+        currentPath === "/dashboard"
+      ) {
+        if (isVoiceMode) {
+          liveAgent.disconnect();
+          setIsVoiceMode(false);
+        }
+        if (currentLoadedChatIdRef.current !== null) {
+          loadChatById(null, { skipPushState: true });
+        }
       } else if (
         currentPath.startsWith("/c/") ||
         currentPath.startsWith("/ai-saathi/c/") ||
@@ -908,20 +1054,87 @@ export function ChatWorkspace({
       ) {
         const id = currentPath
           .replace(/^\/(?:ai-saathi|dashboard)?\/?c\//, "")
+          .replace(/\/+$/, "")
           .split("?")[0];
-        if (id) {
-          if (chatCache.current.has(id)) {
-            setActiveChatId(id);
-            setMessages(chatCache.current.get(id)!);
-          } else {
-            handleSelectChat(id);
-          }
+        if (id && id !== currentLoadedChatIdRef.current) {
+          loadChatById(id, { skipPushState: true });
         }
       }
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
-  }, [isVoiceMode, liveAgent, handleSelectChat]);
+  }, [isVoiceMode, liveAgent, loadChatById]);
+
+  // ── Initial Route / Mount Chat Loader ──
+  const initialMountLoadedRef = useRef(false);
+  useEffect(() => {
+    if (initialMountLoadedRef.current) return;
+    initialMountLoadedRef.current = true;
+
+    let targetId = initialChatId || null;
+    if (!targetId && typeof window !== "undefined") {
+      const p = window.location.pathname;
+      if (p.startsWith("/c/")) {
+        targetId = p.replace(/^\/c\//, "").replace(/\/+$/, "").split("?")[0];
+      }
+    }
+
+    if (targetId) {
+      loadChatById(targetId, { skipPushState: true });
+    } else {
+      loadChatById(null, { skipPushState: true });
+    }
+  }, [initialChatId, loadChatById]);
+
+  // 3. Start New Chat (Instant 0ms in-memory state change, zero page reload)
+  const handleNewChat = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsLoading(false);
+
+    setActiveView("chat");
+    if (isVoiceMode) {
+      liveAgent.disconnect();
+      if (activeChatId && messagesRef.current.length === 0) {
+        handleDeleteChat(activeChatId);
+      }
+      setIsVoiceMode(false);
+    }
+    liveAgent.setLiveArtifact(null);
+
+    loadChatById(null, { skipPushState: false });
+  }, [isVoiceMode, liveAgent, activeChatId, handleDeleteChat, loadChatById]);
+
+  // 4. Select existing chat from history (Instant 0ms in-memory load, zero page reload)
+  const handleSelectChat = useCallback(
+    async (id: string) => {
+      setActiveView("chat");
+      if (id === activeChatId && messagesRef.current.length > 0 && !isVoiceMode && !abortControllerRef.current) return;
+
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+      setIsLoading(false);
+
+      if (isVoiceMode) {
+        liveAgent.disconnect();
+        if (activeChatId && messagesRef.current.length === 0) {
+          handleDeleteChat(activeChatId);
+        }
+        setIsVoiceMode(false);
+      }
+      liveAgent.setLiveArtifact(null);
+
+      if (typeof window !== "undefined" && window.location.pathname !== `/c/${id}`) {
+        window.history.pushState(null, "", `/c/${id}`);
+      }
+      loadChatById(id, { skipPushState: true });
+    },
+    [activeChatId, isVoiceMode, liveAgent, handleDeleteChat, loadChatById],
+  );
 
   // ── Listen for custom reset event (e.g. clicking AI Saathi in sidebar) ──
   useEffect(() => {
@@ -936,7 +1149,7 @@ export function ChatWorkspace({
     };
   }, [handleNewChat]);
 
-  // 6. Rename Chat (IndexedDB + State)
+  // 6. Rename Chat (IndexedDB + State + Global Cache)
   const handleRenameChat = async (id: string, newTitle: string) => {
     try {
       await idbUpdateConversation(id, { title: newTitle });
@@ -945,15 +1158,17 @@ export function ChatWorkspace({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title: newTitle }),
       }).catch(() => {});
-      setConversations((prev) =>
-        prev.map((c) => (c.id === id ? { ...c, title: newTitle } : c)),
-      );
+      setConversations((prev) => {
+        const next = prev.map((c) => (c.id === id ? { ...c, title: newTitle } : c));
+        setCachedConversations(next);
+        return next;
+      });
     } catch (err) {
       console.error("Failed to rename chat:", err);
     }
   };
 
-  // 7. Toggle Pin (IndexedDB + State)
+  // 7. Toggle Pin (IndexedDB + State + Global Cache)
   const handleTogglePin = async (id: string, pinned: boolean) => {
     try {
       await idbUpdateConversation(id, { pinned });
@@ -962,9 +1177,11 @@ export function ChatWorkspace({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ pinned }),
       }).catch(() => {});
-      setConversations((prev) =>
-        prev.map((c) => (c.id === id ? { ...c, pinned } : c)),
-      );
+      setConversations((prev) => {
+        const next = prev.map((c) => (c.id === id ? { ...c, pinned } : c));
+        setCachedConversations(next);
+        return next;
+      });
     } catch (err) {
       console.error("Failed to toggle pin:", err);
     }
@@ -1052,6 +1269,13 @@ function formatSmartChatTitle(rawText: string): string {
     )
       return;
 
+    // Abort any ongoing stream before launching a new turn
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     const userMessageId = `user_${Date.now()}`;
     const assistantMessageId = `asst_${Date.now()}`;
 
@@ -1062,8 +1286,9 @@ function formatSmartChatTitle(rawText: string): string {
     const isFirstMessage = !activeChatId;
 
     if (isFirstMessage) {
+      currentLoadedChatIdRef.current = currentConvId;
       setActiveChatId(currentConvId);
-      window.history.replaceState(null, "", `/c/${currentConvId}`);
+      window.history.pushState(null, "", `/c/${currentConvId}`);
       const initialTitle = formatSmartChatTitle(text);
       setConversations((prev) => [
         {
@@ -1191,6 +1416,7 @@ function formatSmartChatTitle(rawText: string): string {
       const response = await fetch("/api/chat/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: JSON.stringify({
           message: text.trim(),
           attachments: attachments || [],
@@ -1363,22 +1589,16 @@ function formatSmartChatTitle(rawText: string): string {
             }
             scheduleFlush();
           } else if (eventType === "tool_result") {
-            if (data.toolName === "runSWOTScan" && data.result) {
-              const swot = data.result.swot || data.result.data || data.result;
-              saveEnterpriseIntelligence({ swot, awakenedDomains: ["swot"] }).catch(() => {});
-            } else if (data.toolName === "evaluateGovtSchemes" && data.result) {
-              const schemes = data.result.schemes || data.result.data || data.result;
-              saveEnterpriseIntelligence({ schemes, awakenedDomains: ["schemes"] }).catch(() => {});
-            } else if (data.toolName === "getMandiArbitrage" && data.result) {
-              const mandi = data.result.mandi || data.result.commodities || data.result.data || data.result;
-              saveEnterpriseIntelligence({ mandi, awakenedDomains: ["mandi"] }).catch(() => {});
-            } else if (data.toolName === "scanCatchmentRadar" && data.result) {
-              const competitors = data.result.competitors || data.result.data || data.result;
-              saveEnterpriseIntelligence({ competitors, awakenedDomains: ["competitors"] }).catch(() => {});
-            } else if (data.toolName === "evaluateCreditAndEMI" && data.result) {
-              const credit = data.result.credit || data.result.data || data.result;
-              saveEnterpriseIntelligence({ credit, awakenedDomains: ["credit"] }).catch(() => {});
-            }
+            const chatTitle =
+              conversations.find((c) => c.id === currentConvId)?.title ||
+              "Business Research";
+            persistToolResultToEnterprise(
+              currentConvId,
+              chatTitle,
+              data.toolName,
+              data.result,
+              data.summary,
+            );
 
             const isUpdated = data.result?.isUpdated;
             const targetId = data.result?.targetArtifactId || data.result?.artifactId;
@@ -1499,6 +1719,10 @@ function formatSmartChatTitle(rawText: string): string {
       flushToState();
     } catch (err) {
       if (rafId) cancelAnimationFrame(rafId);
+      if (err instanceof Error && err.name === "AbortError") {
+        // Stream aborted because user navigated or started new chat - clean exit
+        return;
+      }
       console.error("Stream execution error:", err);
       setMessages((prev) =>
         prev.map((m) =>
@@ -1516,11 +1740,29 @@ function formatSmartChatTitle(rawText: string): string {
     } finally {
       if (rafId) cancelAnimationFrame(rafId);
       setIsLoading(false);
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+      }
+      if (streamedContent || streamedToolCalls.length > 0) {
+        idbSaveMessage({
+          id: assistantMessageId,
+          conversationId: currentConvId,
+          role: "assistant",
+          content: streamedContent || "",
+          thinking: thoughtDuration ? JSON.stringify({ durationSeconds: thoughtDuration }) : undefined,
+          thoughtDurationSeconds: thoughtDuration,
+          toolCalls: streamedToolCalls,
+          createdAt: Date.now(),
+        }).catch(() => {});
+      }
       fetchConversations();
-      setMessages((current) => {
-        chatCache.current.set(currentConvId, current);
-        return current;
-      });
+      if (currentLoadedChatIdRef.current === currentConvId) {
+        setMessages((current) => {
+          chatCache.current.set(currentConvId, current);
+          setCachedMessages(currentConvId, current);
+          return current;
+        });
+      }
     }
   };
 
@@ -1548,6 +1790,41 @@ function formatSmartChatTitle(rawText: string): string {
         if (msg.role === "assistant") {
           // 1. Check tool calls (from latest to earliest within the message)
           if (msg.toolCalls && msg.toolCalls.length > 0) {
+            const subagentCalls = msg.toolCalls.filter((tc) =>
+              [
+                "scanCatchmentRadar",
+                "searchCompetitors",
+                "getMandiArbitrage",
+                "runSWOTScan",
+                "evaluateGovtSchemes",
+                "evaluateCreditAndEMI",
+                "getOndcIntelligence",
+                "predictDistrictBusinesses",
+              ].includes(tc.toolName) && tc.result
+            );
+
+            if (subagentCalls.length > 0) {
+              const count = subagentCalls.length;
+              const firstRes = subagentCalls[0].result as any;
+              return {
+                artifactId: `swarm_dossier_${msg.id || i}`,
+                artifactType: "swarm_dossier",
+                title:
+                  count === 1
+                    ? (firstRes?.title || "Market Intelligence")
+                    : `Market Intelligence Dossier (${count} Tabs Active)`,
+                summary:
+                  firstRes?.spokenSummary ||
+                  firstRes?.summary ||
+                  "Comprehensive market intelligence dossier ready on screen.",
+                data: {
+                  toolCalls: msg.toolCalls,
+                  content: firstRes?.data?.content || firstRes?.content,
+                  ...firstRes?.data,
+                },
+              } as ArtifactPayload;
+            }
+
             for (let j = msg.toolCalls.length - 1; j >= 0; j--) {
               const tc = msg.toolCalls[j];
               const res = tc.result as any;
@@ -1723,6 +2000,36 @@ function formatSmartChatTitle(rawText: string): string {
             onAttachDocument={liveAgent.attachDocument}
             onRemoveAttachedDocument={liveAgent.removeAttachedDocument}
           />
+        ) : chatLoadError ? (
+          /* CHATGPT-STYLE CONVERSATION ERROR VIEW */
+          <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-200">
+            <div className="max-w-md w-full space-y-4">
+              <h2 className="text-xl sm:text-2xl font-serif font-bold text-foreground">
+                Could not load this conversation
+              </h2>
+              <p className="text-xs sm:text-sm text-muted-foreground">
+                This conversation either does not exist, or may have been deleted.
+              </p>
+              <div className="flex items-center justify-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => activeChatId && loadChatById(activeChatId, { skipPushState: true })}
+                  className="px-4 py-2 rounded-xl bg-forest dark:bg-mint text-white dark:text-black text-xs font-bold shadow-xs hover:shadow-md transition-all cursor-pointer inline-flex items-center gap-1.5"
+                >
+                  <RefreshCw className="size-3.5" />
+                  <span>Retry</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleNewChat}
+                  className="px-4 py-2 rounded-xl border border-sage/40 dark:border-border bg-white dark:bg-card hover:bg-cream dark:hover:bg-muted text-foreground text-xs font-semibold shadow-2xs transition-all cursor-pointer inline-flex items-center gap-1.5"
+                >
+                  <Plus className="size-3.5 text-mint" />
+                  <span>Start New Chat</span>
+                </button>
+              </div>
+            </div>
+          </div>
         ) : isNewChatView ? (
           /* NEW CHAT (Centered Hero View - only for blank /dashboard page) */
           <div className="w-full h-full overflow-y-auto flex flex-col justify-start sm:justify-center items-center px-4 pt-28 pb-12 md:py-10">

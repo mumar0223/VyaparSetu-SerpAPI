@@ -34,6 +34,9 @@ import {
 } from "recharts";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
+import { InteractiveMap } from "@/components/ui/interactive-map";
+import { KpiCards } from "@/components/ui/kpi-cards";
+import { InteractiveCalculator } from "@/components/ui/interactive-calculator";
 
 export interface MarkdownMessageProps {
   content: string;
@@ -98,7 +101,7 @@ function InteractiveCheckbox({ defaultChecked }: { defaultChecked?: boolean }) {
         }
       }}
       className={cn(
-        "inline-flex items-center justify-center size-4 rounded border transition-all cursor-pointer mr-2 align-middle -mt-0.5 select-none shrink-0",
+        "inline-flex items-center justify-center size-4 rounded border transition-all cursor-pointer align-middle select-none shrink-0",
         checked
           ? "bg-forest dark:bg-mint border-forest dark:border-mint text-white dark:text-zinc-950 shadow-2xs"
           : "border-sage/60 dark:border-zinc-600 bg-white dark:bg-zinc-800 hover:border-forest dark:hover:border-mint",
@@ -110,7 +113,7 @@ function InteractiveCheckbox({ defaultChecked }: { defaultChecked?: boolean }) {
 }
 
 interface BlockClassification {
-  type: "mermaid" | "chart" | "process-flow" | "code" | "text";
+  type: "mermaid" | "chart" | "map" | "cards" | "calculator" | "process-flow" | "code" | "text";
   label: string | null;
 }
 
@@ -134,6 +137,37 @@ function detectBlockClassification(language: string, rawCode: string): BlockClas
       /"data"\s*:/i.test(code))
   ) {
     return { type: "chart", label: "Interactive Chart" };
+  }
+
+  // 3. Interactive Leaflet Map (```map, ```leaflet, ```map-json)
+  if (
+    lang === "map" ||
+    lang === "leaflet" ||
+    lang === "map-json" ||
+    (code.startsWith("{") &&
+      (/"markers"\s*:\s*\[/i.test(code) || /"center"\s*:\s*\[/i.test(code)))
+  ) {
+    return { type: "map", label: "Catchment Map" };
+  }
+
+  // 4. KPI / Metric Summary Cards (```cards, ```kpi, ```metrics)
+  if (
+    lang === "cards" ||
+    lang === "kpi" ||
+    lang === "metrics" ||
+    (code.startsWith("{") && /"cards"\s*:\s*\[/i.test(code))
+  ) {
+    return { type: "cards", label: "Key Metrics" };
+  }
+
+  // 5. Interactive Sliders & Formula Simulator (```calculator, ```simulator, ```calc)
+  if (
+    lang === "calculator" ||
+    lang === "simulator" ||
+    lang === "calc" ||
+    (code.startsWith("{") && (/"inputs"\s*:\s*\[/i.test(code) && /"outputs"\s*:\s*\[/i.test(code)))
+  ) {
+    return { type: "calculator", label: "Interactive Calculator" };
   }
 
   // 3. Known programming languages
@@ -1011,6 +1045,21 @@ const markdownComponents: Components = {
       return <InlineMarkdownChart rawJson={rawCode} />;
     }
 
+    // 3. Render Interactive Leaflet Map natively
+    if (block.type === "map") {
+      return <InteractiveMap rawJson={rawCode} />;
+    }
+
+    // 4. Render KPI Metric Summary Cards natively
+    if (block.type === "cards") {
+      return <KpiCards rawJson={rawCode} />;
+    }
+
+    // 5. Render Interactive Calculation Simulator natively
+    if (block.type === "calculator") {
+      return <InteractiveCalculator rawJson={rawCode} />;
+    }
+
     // 3. Render Process Flow / Step Diagrams (e.g. [Step 1] -> [Step 2])
     if (block.type === "process-flow") {
       return (
@@ -1178,13 +1227,21 @@ const markdownComponents: Components = {
   },
   li({ children, className }: any) {
     const isTaskItem = className?.includes("task-list-item");
+    if (isTaskItem) {
+      const childArray = React.Children.toArray(children);
+      const checkbox = childArray[0];
+      const content = childArray.slice(1);
+      return (
+        <li className="list-none flex items-start gap-2.5 py-1 leading-relaxed text-foreground/90">
+          <span className="shrink-0 mt-0.5">{checkbox}</span>
+          <div className="flex-1 min-w-0 space-y-1 [&>ul]:mt-1.5 [&>ul]:pl-4 [&>ol]:mt-1.5 [&>ol]:pl-4">
+            {content}
+          </div>
+        </li>
+      );
+    }
     return (
-      <li
-        className={cn(
-          "leading-relaxed",
-          isTaskItem && "list-none flex items-start py-0.5",
-        )}
-      >
+      <li className="leading-relaxed py-0.5">
         {children}
       </li>
     );

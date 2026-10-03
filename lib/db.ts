@@ -90,11 +90,24 @@ export interface EnterpriseIntelligence {
   updatedAt: number;
 }
 
+export interface EnterpriseRecord {
+  id: string; // `${conversationId}_${domain}`
+  conversationId: string;
+  chatTitle: string;
+  domain: "swot" | "schemes" | "mandi" | "competitors" | "credit" | "custom";
+  title: string;
+  summary: string;
+  data: any;
+  markdown?: string;
+  timestamp: number;
+}
+
 export class VyaparSetuDatabase extends Dexie {
   conversations!: Table<ConversationRecord, string>;
   messages!: Table<MessageRecord, string>;
   business_profile!: Table<BusinessProfile, string>;
   enterprise_intelligence!: Table<EnterpriseIntelligence, string>;
+  enterprise_records!: Table<EnterpriseRecord, string>;
 
   constructor() {
     super("VyaparSetuWorkspaceDB");
@@ -108,6 +121,13 @@ export class VyaparSetuDatabase extends Dexie {
       messages: "id, conversationId, role, createdAt",
       business_profile: "id, updatedAt",
       enterprise_intelligence: "id, updatedAt",
+    });
+    this.version(3).stores({
+      conversations: "id, updatedAt, createdAt, pinned",
+      messages: "id, conversationId, role, createdAt",
+      business_profile: "id, updatedAt",
+      enterprise_intelligence: "id, updatedAt",
+      enterprise_records: "id, conversationId, domain, timestamp",
     });
   }
 }
@@ -162,10 +182,16 @@ export async function updateConversation(
 }
 
 export async function deleteConversation(id: string): Promise<void> {
-  await db.transaction("rw", [db.conversations, db.messages], async () => {
+  await db.transaction("rw", [db.conversations, db.messages, db.enterprise_records], async () => {
     await db.conversations.delete(id);
     await db.messages.where("conversationId").equals(id).delete();
+    await db.enterprise_records.where("conversationId").equals(id).delete();
   });
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(
+      new CustomEvent("vyaparsetu:records-updated", { detail: { deletedChatId: id } }),
+    );
+  }
 }
 
 // ── 2. MESSAGES CRUD ──
@@ -203,12 +229,27 @@ export async function getMessagesByConversationId(
 }
 
 export async function saveMessage(msg: MessageRecord): Promise<string> {
-  const sanitized: MessageRecord = {
-    ...msg,
-    createdAt: typeof msg.createdAt === "number" ? msg.createdAt : Date.now(),
-  };
-  await db.messages.put(sanitized);
-  return sanitized.id;
+  try {
+    const sanitized: MessageRecord = {
+      id: msg.id,
+      conversationId: msg.conversationId,
+      role: msg.role,
+      content: typeof msg.content === "string" ? msg.content : String(msg.content || ""),
+      files: Array.isArray(msg.files) ? JSON.parse(JSON.stringify(msg.files)) : [],
+      thinking: typeof msg.thinking === "string" ? msg.thinking : undefined,
+      toolCalls: msg.toolCalls ? JSON.parse(JSON.stringify(msg.toolCalls)) : undefined,
+      thoughtDurationSeconds:
+        typeof msg.thoughtDurationSeconds === "number"
+          ? msg.thoughtDurationSeconds
+          : undefined,
+      createdAt: typeof msg.createdAt === "number" ? msg.createdAt : Date.now(),
+    };
+    await db.messages.put(sanitized);
+    return sanitized.id;
+  } catch (err) {
+    console.error("[Dexie] saveMessage error:", err);
+    return msg.id;
+  }
 }
 
 // ── 3. BUSINESS PROFILE & LOCATION MEMORY ──
@@ -312,5 +353,48 @@ export async function saveEnterpriseIntelligence(
   }
 
   return updated;
+}
+
+// ── 5. ENTERPRISE RECORDS CRUD (Per Domain & Per Conversation) ──
+
+export async function saveEnterpriseRecord(record: EnterpriseRecord): Promise<void> {
+  try {
+    await db.enterprise_records.put(record);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("vyaparsetu:records-updated", { detail: record }),
+      );
+    }
+  } catch (err) {
+    console.error("[Dexie] saveEnterpriseRecord error:", err);
+  }
+}
+
+export async function getEnterpriseRecords(domain?: string): Promise<EnterpriseRecord[]> {
+  try {
+    let list: EnterpriseRecord[] = [];
+    if (domain && domain !== "all" && domain !== "overview") {
+      list = await db.enterprise_records.where("domain").equals(domain).toArray();
+    } else {
+      list = await db.enterprise_records.toArray();
+    }
+    return list.sort((a, b) => b.timestamp - a.timestamp);
+  } catch (err) {
+    console.error("[Dexie] getEnterpriseRecords error:", err);
+    return [];
+  }
+}
+
+export async function getEnterpriseRecord(
+  conversationId: string,
+  domain: string,
+): Promise<EnterpriseRecord | undefined> {
+  try {
+    const id = `${conversationId}_${domain}`;
+    return await db.enterprise_records.get(id);
+  } catch (err) {
+    console.error("[Dexie] getEnterpriseRecord error:", err);
+    return undefined;
+  }
 }
 

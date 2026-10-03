@@ -16,7 +16,6 @@ export async function GET(req: NextRequest) {
 
 async function handleVoiceSession(req: NextRequest) {
   try {
-
     const project = process.env.GOOGLE_VERTEX_PROJECT;
     const location = process.env.LIVE_VOICE_LOCATION || "us-central1";
     const clientEmail = process.env.GOOGLE_CLIENT_EMAIL;
@@ -95,15 +94,16 @@ Ground all voice suggestions, SWOT scans, and mandi queries to "${businessProfil
       new URL(req.url).searchParams.get("isCameraActive") === "true",
     );
     const rawLang =
-      body.language ||
-      new URL(req.url).searchParams.get("language") ||
-      "en";
+      body.language || new URL(req.url).searchParams.get("language") || "en";
     const languageCode = rawLang.split("-")[0]; // "hi-IN" -> "hi"
 
     const LANGUAGE_MAP: Record<string, { name: string; native: string }> = {
       en: { name: "English", native: "English" },
       hi: { name: "Hindi", native: "हिन्दी" },
-      hinglish: { name: "Hinglish", native: "Hinglish (Hindi in Roman script)" },
+      hinglish: {
+        name: "Hinglish",
+        native: "Hinglish (Hindi in Roman script)",
+      },
       mr: { name: "Marathi", native: "मराठी" },
       bn: { name: "Bengali", native: "বাংলা" },
       gu: { name: "Gujarati", native: "ગુજરાતી" },
@@ -118,7 +118,9 @@ Ground all voice suggestions, SWOT scans, and mandi queries to "${businessProfil
     const isHinglish = languageCode === "hinglish";
     const isRegional = languageCode && languageCode !== "en" && !isHinglish;
 
-    const history = conversationId ? chatStore.getMessages(conversationId).slice(-20) : [];
+    const history = conversationId
+      ? chatStore.getMessages(conversationId).slice(-20)
+      : [];
     const hasHistory = history.length > 0;
 
     const languageInstruction = `\n======================================================================
@@ -127,13 +129,24 @@ LANGUAGE POLICY (HIGHEST PRIORITY; STRICTLY OVERRIDES EVERY EXAMPLE BELOW):
 APP LANGUAGE: ${targetLang.name} (${targetLang.native})
 ${hasHistory ? `SESSION STATE: EXISTING CONVERSATION (${history.length} previous messages).` : "SESSION STATE: NEW CHAT, no prior turns."}
 
-1. If this is a new chat (or if the user's first utterance is a greeting, single word, or ambiguous like "Hello", "Hi", "Namaste", "haan", or a name):
-   You MUST reply primarily in ${targetLang.name} (${targetLang.native}), even if the greeting itself is in English!
-2. Once the user speaks or asks in ANY clear language (English, Hindi, Hinglish, Marathi, etc.):
-   IMMEDIATELY respond in the language of the user's most recent clear utterance. Switch as soon as it changes.
-3. If the user's latest utterance is ambiguous (short greeting, yes/no, number, single word), KEEP the language of your previous reply. Never switch to Hinglish or Hindi when the discussion has been in English!
-4. Hindi in Roman script means Hinglish; reply in Hinglish.
-5. Example lines in this prompt are structural illustrations only. NEVER copy their language unless the user spoke that language!`;
+You must dynamically choose your response language based on these three clear scenarios:
+
+SCENARIO 1 (NO HISTORY & AMBIGUOUS LANGUAGE):
+- If this is a new chat (or no prior history exists) and the user's input does not clearly establish a language (e.g. greetings like "Hello", "Hi", "Namaste", single words, names, or isolated keywords like "Indore and onion price", "Bhav batao", "haan"):
+- You MUST default to and reply in the APP LANGUAGE: ${targetLang.name} (${targetLang.native}).
+
+SCENARIO 2 (CLEAR LANGUAGE & HIGH CONFIDENCE):
+- Whenever the user speaks in ANY language with clear grammar and confidence (whether English, Hindi, Hinglish, Marathi, Gujarati, etc.):
+- You MUST immediately match and reply in that EXACT language. Switch seamlessly whenever the user clearly switches languages.
+
+SCENARIO 3 (AMBIGUOUS LANGUAGE / LOW CONFIDENCE WITH EXISTING HISTORY):
+- If there is existing conversation history, but the user's latest utterance is ambiguous, short, or code-mixed where you cannot confirm with full confidence that the user intentionally shifted languages (e.g. isolated commodity keywords like "Indore and onion price", "Soyabean rate", single words, or confirmations like "Haan", "Yes", "Ok"):
+- DO NOT jump or switch languages! You MUST reply in the language established in the previous conversation history.
+- If previous turns were in English, stay in English.
+- If previous turns were in Hindi, stay in Hindi.
+
+Hindi in Roman script means Hinglish; reply in Hinglish.
+Example lines in this prompt are structural illustrations only. NEVER copy their language unless the user spoke that language!`;
 
     const modelId = (LIVE_VOICE_AGENT_CONFIG.model || "gemini-3.8-live")
       .replace(/^models\//, "")
@@ -147,12 +160,48 @@ ${hasHistory ? `SESSION STATE: EXISTING CONVERSATION (${history.length} previous
       ? `CURRENT VISIBLE SCREEN ARTIFACT: ${activeArtifactOverview.type || "artifact"} - "${activeArtifactOverview.title}" (${activeArtifactOverview.summary || "active on screen"}). Any field updates apply directly to this active artifact.`
       : `CURRENT VISIBLE SCREEN ARTIFACT: NONE (No digital form or document is currently open on the user's screen).`;
 
+    // Extract crisp spoken summaries from conversation history for the Voice Agent
+    let historyContext = "";
+    if (hasHistory) {
+      const summaryItems: string[] = [];
+      for (const m of history) {
+        if (m.role === "user" && m.content) {
+          summaryItems.push(`User asked: "${m.content.slice(0, 150)}"`);
+        } else if (m.role === "assistant") {
+          if (Array.isArray(m.toolCalls)) {
+            for (const tc of m.toolCalls) {
+              const res = tc.result;
+              const spoken = res?.spokenSummary || res?.summary || tc.summary;
+              if (spoken) {
+                summaryItems.push(`[Sub-Agent Finding - ${tc.toolName}]: ${String(spoken).replace(/\*\*/g, "")}`);
+              }
+            }
+          }
+          if (m.content) {
+            const cleanText = m.content.replace(/```[\s\S]*?```/g, "").replace(/\|[\s\S]*?\|/g, "").trim();
+            if (cleanText) {
+              summaryItems.push(`Advisor response: "${cleanText.slice(0, 250)}"`);
+            }
+          }
+        }
+      }
+
+      if (summaryItems.length > 0) {
+        historyContext = `\n======================================================================
+PREVIOUS RESEARCH & SUB-AGENT FINDINGS (Session Intelligence):
+======================================================================
+${summaryItems.slice(-8).map((s) => `• ${s}`).join("\n")}
+When the user asks about previous findings or context, seamlessly reference these verified results. Speak naturally and concisely without reciting code blocks or raw table markdown.`;
+      }
+    }
+
     const cameraHardwareContext = isCameraActive
-      ? `CURRENT CAMERA HARDWARE STATUS: OPEN (Camera is currently turned ON and video frames are actively streaming).`
-      : `CURRENT CAMERA HARDWARE STATUS: CLOSED (Camera is currently turned OFF; no video frames are streaming).`;
+      ? `CAMERA STATUS: ACTIVE (The user's camera feed is streaming in real-time. You can visually inspect documents, shops, products, and receipts presented by the user).`
+      : `CAMERA STATUS: INACTIVE (The user's camera is currently closed).`;
 
     let systemInstruction = `You are VyaparSetu Voice (व्यापारसेतु), a male AI business advisor and trade partner for Indian micro-enterprises, shopkeepers, traders, and farmers.${profileContext}
 ${languageInstruction}
+${historyContext}
 ${artifactContext}
 ${cameraHardwareContext}
 
@@ -385,7 +434,10 @@ REFUSAL DIRECTIVE (ZERO TOOLS, DIGNIFIED DEFLECTION):
 - Directive: Any user intent expressing values, fields, updates, or actions in this context is an instruction to modify this on-screen item. Call 'triggerScreenAction' immediately to have the autonomous sub-agent update it in place.`;
     }
 
-    systemInstruction += `\n\nFINAL REMINDER ON LANGUAGE: Always mirror the user's spoken language. If the user spoke English, reply strictly in English. Do NOT switch to Hindi or Hinglish after a tool executes!`;
+    systemInstruction += `\n\nFINAL REMINDER ON LANGUAGE:
+- Scenario 1 (No history & ambiguous): Reply in App Language (${targetLang.name}).
+- Scenario 2 (Clear sentence in specific language): Match that language immediately.
+- Scenario 3 (Ambiguous keywords like "Indore and onion price" with history): Strictly stick to the language of the previous conversation turns! Do NOT switch languages on isolated keywords!`;
 
     const tools = [
       {

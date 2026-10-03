@@ -24,6 +24,11 @@ import {
   CreditCard,
   Calculator,
   Search,
+  ArrowLeft,
+  ExternalLink,
+  ChevronLeft,
+  ChevronRight,
+  Calendar,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -39,12 +44,16 @@ import {
 import {
   getEnterpriseIntelligence,
   getActiveBusinessProfile,
+  getEnterpriseRecords,
+  getEnterpriseRecord,
   type BusinessProfile,
   type EnterpriseIntelligence,
+  type EnterpriseRecord,
 } from "@/lib/db";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { MarkdownMessage } from "@/components/chat/markdown-message";
 
 interface EnterpriseHubViewProps {
   businessProfile?: BusinessProfile | null;
@@ -58,7 +67,364 @@ export type EnterpriseTab =
   | "schemes"
   | "mandi"
   | "competitors"
-  | "credit";
+  | "credit"
+  | "custom";
+
+export const VALID_ENTERPRISE_TABS: EnterpriseTab[] = [
+  "overview",
+  "swot",
+  "schemes",
+  "mandi",
+  "competitors",
+  "credit",
+  "custom",
+];
+
+export function getOrSynthesizeMarkdown(record: EnterpriseRecord): string {
+  if (record.markdown && typeof record.markdown === "string" && record.markdown.trim().length > 0) {
+    return record.markdown;
+  }
+  if (record.data?.content && typeof record.data.content === "string") {
+    return record.data.content;
+  }
+  if (record.data?.markdown && typeof record.data.markdown === "string") {
+    return record.data.markdown;
+  }
+  if (record.data?.dossier && typeof record.data.dossier === "string") {
+    return record.data.dossier;
+  }
+
+  const { domain, data, title, summary } = record;
+
+  if (domain === "competitors") {
+    const list: any[] = Array.isArray(data)
+      ? data
+      : Array.isArray(data?.competitors)
+        ? data.competitors
+        : [];
+    if (list.length > 0) {
+      const avgRating = (
+        list.reduce((acc, c) => acc + (Number(c.rating) || 4.0), 0) / list.length
+      ).toFixed(1);
+      const highThreats = list.filter((c) => c.threatLevel === "High").length;
+      return `### 🏪 ${title || "Google Maps Competitor Density Radar"}
+
+${summary || "Local competitor ratings, prices, and positioning scanned across the catchment area."}
+
+\`\`\`cards
+${JSON.stringify(
+  {
+    title: "Catchment Radar Snapshot",
+    cards: [
+      { label: "Competitors Mapped", value: `${list.length} Outlets`, status: "neutral", subtext: "Within local catchment" },
+      { label: "Avg Customer Rating", value: `${avgRating}★`, status: Number(avgRating) >= 4.2 ? "warning" : "positive", subtext: "Catchment satisfaction" },
+      { label: "High-Threat Rivals", value: `${highThreats}`, status: highThreats > 0 ? "negative" : "positive", subtext: "4.3+★ rated rivals" },
+    ],
+  },
+  null,
+  2,
+)}
+\`\`\`
+
+| Business Name | Distance | Rating | Price Tier | Market Threat | Key Differentiator |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+${list.map((c) => `| **${c.name}** | ${c.distance || "Local"} | ★ ${c.rating || "4.0"} | ${c.priceRange || "$$"} | ${c.threatLevel === "High" ? "🔴 High" : c.threatLevel === "Medium" ? "🟡 Medium" : "🟢 Low"} | ${c.differentiator || "Retail competitor"} |`).join("\n")}
+
+> **Strategic Positioning:**
+> Leverage personalized customer service, faster order fulfillment, and targeted local promotions to outpace nearby rivals.`;
+    }
+  }
+
+  if (domain === "swot") {
+    const swot = data?.swot || data || {};
+    const strengths: string[] = swot.strengths || [];
+    const weaknesses: string[] = swot.weaknesses || [];
+    const opportunities: string[] = swot.opportunities || [];
+    const threats: string[] = swot.threats || [];
+    const actionPlan: string[] = swot.actionPlan || [];
+    return `### 🎯 ${title || "SWOT Strategic Radar"}
+
+${summary || "Live strategic SWOT assessment assembled from market signals and competitive density."}
+
+\`\`\`cards
+${JSON.stringify(
+  {
+    title: "Strategic Overview",
+    cards: [
+      { label: "Identified Strengths", value: `${strengths.length}`, status: "positive", subtext: "Internal moats" },
+      { label: "Growth Opportunities", value: `${opportunities.length}`, status: "positive", subtext: "Market upsides" },
+      { label: "Monitored Threats", value: `${threats.length}`, status: threats.length > 2 ? "negative" : "neutral", subtext: "Risk vectors" },
+    ],
+  },
+  null,
+  2,
+)}
+\`\`\`
+
+| Quadrant | Key Strategic Factors |
+| :--- | :--- |
+| **Strengths (ताकत)** | ${strengths.map((s) => `• ${s}`).join("<br/>") || "Market presence"} |
+| **Weaknesses (कमजोरी)** | ${weaknesses.map((w) => `• ${w}`).join("<br/>") || "Capital constraints"} |
+| **Opportunities (अवसर)** | ${opportunities.map((o) => `• ${o}`).join("<br/>") || "Digital adoption"} |
+| **Threats (चुनौतियां)** | ${threats.map((t) => `• ${t}`).join("<br/>") || "Price competition"} |
+
+${actionPlan.length > 0 ? `
+> **Tactical Action Plan:**
+${actionPlan.map((a) => `> • ${a}`).join("\n")}
+` : ""}`;
+  }
+
+  if (domain === "schemes") {
+    const list: any[] = Array.isArray(data)
+      ? data
+      : Array.isArray(data?.schemes)
+        ? data.schemes
+        : [];
+    if (list.length > 0) {
+      return `### 🏛️ ${title || "Government Schemes & Capital Subsidies"}
+
+${summary || "Central and State MSME subsidy programs matched to your business scale."}
+
+| Scheme Name | Assistance / Subsidy | Interest Rate / Terms | Eligibility & Requirements |
+| :--- | :--- | :--- | :--- |
+${list.map((s) => `| **${s.title || s.name}** | ${s.amount || s.subsidy || s.maxAssistance || "Grant/Subsidy"} | ${s.interest || s.subsidyPercentage || "Subsidized"} | ${s.eligibility || "MSME registered enterprises"} |`).join("\n")}
+
+> **Application Advisory:**
+> File applications on official MSME single-window portals with your Udyam Certificate and project DPR ready.`;
+    }
+  }
+
+  if (domain === "mandi") {
+    const list: any[] = Array.isArray(data)
+      ? data
+      : Array.isArray(data?.mandi)
+        ? data.mandi
+        : Array.isArray(data?.commodities)
+          ? data.commodities
+          : [];
+    if (list.length > 0) {
+      return `### 🌾 ${title || "APMC Mandi Spot Rates & Arbitrage"}
+
+${summary || "Wholesale commodity arrivals and spot prices across regional yards."}
+
+| Commodity / Variety | Mandi Yard | Modal Price | Daily Arrivals | 24h Trend |
+| :--- | :--- | :--- | :--- | :--- |
+${list.map((m) => `| **${m.name || m.commodity}** ${m.variety ? `(${m.variety})` : ""} | ${m.market || "APMC Yard"} | **${m.modalPrice}** ${m.unit ? `/${m.unit}` : ""} | ${m.arrivals || "Active"} | ${m.trend || "Steady"} |`).join("\n")}
+
+> **Procurement & Arbitrage Guidance:**
+> Monitor inter-mandi price spreads to optimize truckload procurement and bulk dispatch schedules.`;
+    }
+  }
+
+  if (domain === "credit") {
+    const credit = data?.credit || data || {};
+    return `### 💳 ${title || "Credit Readiness & Debt Service Coverage"}
+
+${summary || "Bureau score estimation and borrowing headroom."}
+
+\`\`\`cards
+${JSON.stringify(
+  {
+    title: "Commercial Credit Health",
+    cards: [
+      { label: "Bureau Score", value: `${credit.estimatedCibilScore || 775} / 900`, status: "positive", subtext: credit.healthGrade || "Prime tier" },
+      { label: "DSCR Ratio", value: `${credit.dscr || "2.8x"}`, status: "positive", subtext: "Debt service capacity" },
+      { label: "Recommended Headroom", value: `${credit.maxRecommendedLoan || "₹25,00,000"}`, status: "neutral", subtext: "Optimal leverage" },
+    ],
+  },
+  null,
+  2,
+)}
+\`\`\`
+
+${credit.recommendations && credit.recommendations.length > 0 ? `
+> **Credit Underwriting Advice:**
+${credit.recommendations.map((r: string) => `> • ${r}`).join("\n")}
+` : ""}`;
+  }
+
+  if (domain === "custom") {
+    return `### 🔬 ${title || "Specialized Intelligence Dossier"}
+
+${summary || "Autonomous sub-agent analysis."}
+
+${typeof data === "string" ? data : JSON.stringify(data, null, 2)}`;
+  }
+
+  return `### 📄 ${title || "Enterprise Intelligence Dossier"}
+
+${summary || "Grounded business research report."}`;
+}
+
+// ── Top Navigation Banner for Single Chat Dossier Detail View ──
+function SelectedRecordBanner({
+  record,
+  onBack,
+}: {
+  record: EnterpriseRecord;
+  onBack: () => void;
+}) {
+  return (
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-white/70 dark:bg-card/70 border border-sage/30 dark:border-border shadow-xs">
+      <button
+        type="button"
+        onClick={onBack}
+        className="flex items-center gap-2 text-xs font-bold text-forest dark:text-mint hover:underline cursor-pointer"
+      >
+        <ArrowLeft className="size-4" />
+        <span>Back to all {record.domain.toUpperCase()} reports</span>
+      </button>
+      <div className="flex items-center gap-3 text-xs">
+        <span className="text-muted-foreground">Source Conversation:</span>
+        <span className="font-semibold text-foreground truncate max-w-[200px]">
+          {record.chatTitle}
+        </span>
+        <Link
+          href={`/c/${record.conversationId}`}
+          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-mint/15 hover:bg-mint/25 text-forest dark:text-mint font-bold transition-colors"
+        >
+          <span>Open Thread</span>
+          <ExternalLink className="size-3" />
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+// ── Paginated Card Grid for Generated Intelligence Reports ──
+function EnterpriseRecordCardList({
+  records,
+  activeTab,
+  onSelectRecord,
+  currentPage,
+  onPageChange,
+  emptyTitle,
+  emptyDesc,
+  emptyIcon: EmptyIcon,
+  onRunScan,
+}: {
+  records: EnterpriseRecord[];
+  activeTab: string;
+  onSelectRecord: (rec: EnterpriseRecord) => void;
+  currentPage: number;
+  onPageChange: (page: number) => void;
+  emptyTitle?: string;
+  emptyDesc?: string;
+  emptyIcon?: any;
+  onRunScan?: () => void;
+}) {
+  const PAGE_SIZE = 6;
+  const totalPages = Math.max(1, Math.ceil(records.length / PAGE_SIZE));
+  const pageIndex = Math.min(Math.max(1, currentPage), totalPages);
+  const displayedRecords = records.slice(
+    (pageIndex - 1) * PAGE_SIZE,
+    pageIndex * PAGE_SIZE,
+  );
+
+  if (records.length === 0) {
+    return (
+      <div className="p-8 rounded-3xl bg-white/60 dark:bg-card/60 border border-sage/30 dark:border-border text-center space-y-3">
+        {EmptyIcon && <EmptyIcon className="size-8 text-mint mx-auto" />}
+        <h3 className="font-serif font-bold text-base text-forest dark:text-foreground">
+          {emptyTitle || "No Records Found"}
+        </h3>
+        <p className="text-xs text-muted-foreground max-w-md mx-auto">
+          {emptyDesc || "No intelligence analysis has been run for this domain yet."}
+        </p>
+        {onRunScan && (
+          <button
+            type="button"
+            onClick={onRunScan}
+            className="px-4 py-2 rounded-xl bg-forest dark:bg-mint text-white dark:text-black text-xs font-bold shadow-xs hover:shadow-md transition-all cursor-pointer inline-flex items-center gap-1.5"
+          >
+            <Search className="size-3.5 text-mint dark:text-black" />
+            <span>Run Live Scan via SerpApi</span>
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {displayedRecords.map((rec) => (
+          <div
+            key={rec.id}
+            onClick={() => onSelectRecord(rec)}
+            className="p-5 rounded-3xl bg-white/70 dark:bg-card/70 border border-sage/30 dark:border-border shadow-xs hover:shadow-md hover:border-mint/50 transition-all cursor-pointer flex flex-col justify-between space-y-3 group"
+          >
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
+                <span className="font-semibold text-forest dark:text-mint uppercase tracking-wider text-[10px] px-2 py-0.5 rounded-full bg-mint/10 border border-mint/20">
+                  {rec.domain.toUpperCase()}
+                </span>
+                <span className="flex items-center gap-1 font-mono text-[10px]">
+                  <Calendar className="size-3 text-muted-foreground" />
+                  {new Date(rec.timestamp).toLocaleDateString("en-IN", {
+                    month: "short",
+                    day: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </span>
+              </div>
+
+              <h4 className="font-serif font-bold text-sm text-forest dark:text-foreground group-hover:text-mint transition-colors line-clamp-1">
+                {rec.chatTitle}
+              </h4>
+
+              <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
+                {rec.summary || "Generated intelligence dossier"}
+              </p>
+            </div>
+
+            <div className="pt-2 flex items-center justify-between border-t border-sage/15 dark:border-border text-xs">
+              <span className="text-[11px] text-muted-foreground font-mono">
+                {Array.isArray(rec.data)
+                  ? `${rec.data.length} records analyzed`
+                  : rec.domain === "swot"
+                    ? "4-Quadrant SWOT"
+                    : rec.domain === "credit"
+                      ? "Score & Borrowing Capacity"
+                      : "Grounded Insights"}
+              </span>
+              <span className="text-forest dark:text-mint font-bold inline-flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
+                View Analysis <ArrowRight className="size-3" />
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-3 pt-4 select-none">
+          <button
+            type="button"
+            disabled={pageIndex <= 1}
+            onClick={() => onPageChange(pageIndex - 1)}
+            className="px-3 py-1.5 rounded-xl border border-sage/30 dark:border-border bg-white dark:bg-card text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-cream dark:hover:bg-muted transition-colors inline-flex items-center gap-1 cursor-pointer"
+          >
+            <ChevronLeft className="size-3.5" />
+            <span>Previous</span>
+          </button>
+          <span className="text-xs font-medium text-muted-foreground font-mono">
+            Page {pageIndex} of {totalPages}
+          </span>
+          <button
+            type="button"
+            disabled={pageIndex >= totalPages}
+            onClick={() => onPageChange(pageIndex + 1)}
+            className="px-3 py-1.5 rounded-xl border border-sage/30 dark:border-border bg-white dark:bg-card text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-cream dark:hover:bg-muted transition-colors inline-flex items-center gap-1 cursor-pointer"
+          >
+            <span>Next</span>
+            <ChevronRight className="size-3.5" />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function EnterpriseHubView({
   businessProfile: initialProfile,
@@ -66,11 +432,31 @@ export function EnterpriseHubView({
   onOpenPersonaDialog,
 }: EnterpriseHubViewProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get("tab") as EnterpriseTab | null;
+  const idParam = searchParams.get("id");
+
   const [profile, setProfile] = useState<BusinessProfile | null>(initialProfile || null);
   const [intelligence, setIntelligence] = useState<EnterpriseIntelligence | null>(null);
-  const [activeTab, setActiveTab] = useState<EnterpriseTab>("overview");
+  const [activeTab, setActiveTab] = useState<EnterpriseTab>(
+    tabParam && VALID_ENTERPRISE_TABS.includes(tabParam)
+      ? tabParam
+      : "overview",
+  );
+  const [records, setRecords] = useState<EnterpriseRecord[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [selectedRecord, setSelectedRecord] = useState<EnterpriseRecord | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Sync activeTab when tabParam in URL changes
+  useEffect(() => {
+    if (tabParam && VALID_ENTERPRISE_TABS.includes(tabParam)) {
+      setActiveTab(tabParam);
+      setCurrentPage(1);
+    }
+  }, [tabParam]);
+
+  // Fetch business profile and baseline intelligence
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -99,6 +485,60 @@ export function EnterpriseHubView({
     };
   }, [initialProfile]);
 
+  // Fetch domain records and resolve selectedRecord by idParam
+  useEffect(() => {
+    let isMounted = true;
+    const fetchDomainRecords = async () => {
+      if (activeTab === "overview") {
+        if (isMounted) {
+          setRecords([]);
+          setSelectedRecord(null);
+        }
+        return;
+      }
+      const list = await getEnterpriseRecords(activeTab);
+      if (!isMounted) return;
+      setRecords(list);
+
+      if (idParam) {
+        const found = list.find((r) => r.conversationId === idParam);
+        if (found) {
+          setSelectedRecord(found);
+        } else {
+          const rec = await getEnterpriseRecord(idParam, activeTab);
+          if (isMounted) setSelectedRecord(rec || null);
+        }
+      } else {
+        setSelectedRecord(null);
+      }
+    };
+
+    fetchDomainRecords();
+    return () => {
+      isMounted = false;
+    };
+  }, [activeTab, idParam]);
+
+  // Real-time update and deletion listener for records
+  useEffect(() => {
+    const handleRecordsUpdate = (e: any) => {
+      const deletedId = e.detail?.deletedChatId;
+      if (deletedId && idParam === deletedId) {
+        const url = new URL(window.location.href);
+        url.searchParams.delete("id");
+        router.push(url.pathname + "?" + url.searchParams.toString());
+      }
+      if (activeTab !== "overview") {
+        getEnterpriseRecords(activeTab).then(setRecords);
+      }
+    };
+
+    window.addEventListener("vyaparsetu:records-updated", handleRecordsUpdate);
+    return () => {
+      window.removeEventListener("vyaparsetu:records-updated", handleRecordsUpdate);
+    };
+  }, [activeTab, idParam, router]);
+
   const shopName = profile?.businessName || "My MSME Enterprise";
   const sector = profile?.category || "Retail & Wholesale Trade";
   const location = profile?.district || profile?.city || "India";
@@ -110,6 +550,31 @@ export function EnterpriseHubView({
     } else {
       router.push(`/?prompt=${encodeURIComponent(prompt)}`);
     }
+  };
+
+  const handleTabClick = (tab: EnterpriseTab) => {
+    setActiveTab(tab);
+    setCurrentPage(1);
+    setSelectedRecord(null);
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", tab);
+    url.searchParams.delete("id");
+    router.push(url.pathname + "?" + url.searchParams.toString());
+  };
+
+  const handleSelectRecord = (rec: EnterpriseRecord) => {
+    setSelectedRecord(rec);
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", rec.domain);
+    url.searchParams.set("id", rec.conversationId);
+    router.push(url.pathname + "?" + url.searchParams.toString());
+  };
+
+  const handleBackToList = () => {
+    setSelectedRecord(null);
+    const url = new URL(window.location.href);
+    url.searchParams.delete("id");
+    router.push(url.pathname + "?" + url.searchParams.toString());
   };
 
   // Turn active turnover into numeric values for telemetry
@@ -134,13 +599,9 @@ export function EnterpriseHubView({
   ];
 
   const awakened = intelligence?.awakenedDomains || [];
-  const isDomainActive = (d: string) => awakened.includes(d);
+  const isDomainActive = (d: string) => awakened.includes(d) || records.some((r) => r.domain === d);
 
-  // Purely dynamic lists from Dexie (ZERO hardcoded fallback data)
-  const mandiCommodities = intelligence?.mandi || [];
-  const creditSchemes = intelligence?.schemes || [];
-  const swotData = intelligence?.swot || null;
-  const competitorData = intelligence?.competitors || [];
+  // Dynamically resolve baseline credit data for fallback KPI metrics
   const creditData = intelligence?.credit || null;
 
   return (
@@ -196,7 +657,7 @@ export function EnterpriseHubView({
             <button
               onClick={() =>
                 handleAsk(
-                  `Conduct a complete 360-degree autonomous multi-agent enterprise audit for "${shopName}" (${sector}) located at ${location}. Wake up SWOT, Govt Schemes, Mandi Arbitrage, Competitor Radar, and Credit Health agents using real-time SerpApi grounding.`
+                  `Conduct a complete 360-degree autonomous multi-agent enterprise audit for "${shopName}" (${sector}) located at ${location}. Wake up SWOT, Govt Schemes, Mandi Arbitrage, Competitor Radar, and Credit Health agents using real-time SerpApi grounding.`,
                 )
               }
               className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-forest dark:bg-mint text-white dark:text-black text-xs font-bold shadow-sm hover:shadow-md transition-all cursor-pointer group"
@@ -210,12 +671,12 @@ export function EnterpriseHubView({
         {/* ── Enterprise Tab Navigation Bar ── */}
         <div className="flex items-center gap-1.5 p-1.5 bg-cream/70 dark:bg-card/70 backdrop-blur-md rounded-2xl border border-sage/30 dark:border-border overflow-x-auto select-none">
           <button
-            onClick={() => setActiveTab("overview")}
+            onClick={() => handleTabClick("overview")}
             className={cn(
               "flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap cursor-pointer",
               activeTab === "overview"
                 ? "bg-white dark:bg-muted text-forest dark:text-mint shadow-xs font-bold"
-                : "text-muted-foreground hover:text-foreground hover:bg-white/40 dark:hover:bg-muted/40"
+                : "text-muted-foreground hover:text-foreground hover:bg-white/40 dark:hover:bg-muted/40",
             )}
           >
             <BarChart3 className="size-3.5" />
@@ -223,12 +684,12 @@ export function EnterpriseHubView({
           </button>
 
           <button
-            onClick={() => setActiveTab("swot")}
+            onClick={() => handleTabClick("swot")}
             className={cn(
               "flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap cursor-pointer relative",
               activeTab === "swot"
                 ? "bg-white dark:bg-muted text-forest dark:text-mint shadow-xs font-bold"
-                : "text-muted-foreground hover:text-foreground hover:bg-white/40 dark:hover:bg-muted/40"
+                : "text-muted-foreground hover:text-foreground hover:bg-white/40 dark:hover:bg-muted/40",
             )}
           >
             <Target className="size-3.5" />
@@ -239,12 +700,12 @@ export function EnterpriseHubView({
           </button>
 
           <button
-            onClick={() => setActiveTab("schemes")}
+            onClick={() => handleTabClick("schemes")}
             className={cn(
               "flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap cursor-pointer",
               activeTab === "schemes"
                 ? "bg-white dark:bg-muted text-forest dark:text-mint shadow-xs font-bold"
-                : "text-muted-foreground hover:text-foreground hover:bg-white/40 dark:hover:bg-muted/40"
+                : "text-muted-foreground hover:text-foreground hover:bg-white/40 dark:hover:bg-muted/40",
             )}
           >
             <Landmark className="size-3.5" />
@@ -255,12 +716,12 @@ export function EnterpriseHubView({
           </button>
 
           <button
-            onClick={() => setActiveTab("mandi")}
+            onClick={() => handleTabClick("mandi")}
             className={cn(
               "flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap cursor-pointer",
               activeTab === "mandi"
                 ? "bg-white dark:bg-muted text-forest dark:text-mint shadow-xs font-bold"
-                : "text-muted-foreground hover:text-foreground hover:bg-white/40 dark:hover:bg-muted/40"
+                : "text-muted-foreground hover:text-foreground hover:bg-white/40 dark:hover:bg-muted/40",
             )}
           >
             <Coins className="size-3.5" />
@@ -271,12 +732,12 @@ export function EnterpriseHubView({
           </button>
 
           <button
-            onClick={() => setActiveTab("competitors")}
+            onClick={() => handleTabClick("competitors")}
             className={cn(
               "flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap cursor-pointer",
               activeTab === "competitors"
                 ? "bg-white dark:bg-muted text-forest dark:text-mint shadow-xs font-bold"
-                : "text-muted-foreground hover:text-foreground hover:bg-white/40 dark:hover:bg-muted/40"
+                : "text-muted-foreground hover:text-foreground hover:bg-white/40 dark:hover:bg-muted/40",
             )}
           >
             <Store className="size-3.5" />
@@ -287,17 +748,33 @@ export function EnterpriseHubView({
           </button>
 
           <button
-            onClick={() => setActiveTab("credit")}
+            onClick={() => handleTabClick("credit")}
             className={cn(
               "flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap cursor-pointer",
               activeTab === "credit"
                 ? "bg-white dark:bg-muted text-forest dark:text-mint shadow-xs font-bold"
-                : "text-muted-foreground hover:text-foreground hover:bg-white/40 dark:hover:bg-muted/40"
+                : "text-muted-foreground hover:text-foreground hover:bg-white/40 dark:hover:bg-muted/40",
             )}
           >
             <CreditCard className="size-3.5" />
             <span>💳 Credit &amp; Borrowing</span>
             {isDomainActive("credit") && (
+              <span className="size-1.5 rounded-full bg-mint animate-pulse" />
+            )}
+          </button>
+
+          <button
+            onClick={() => handleTabClick("custom")}
+            className={cn(
+              "flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap cursor-pointer",
+              activeTab === "custom"
+                ? "bg-white dark:bg-muted text-forest dark:text-mint shadow-xs font-bold"
+                : "text-muted-foreground hover:text-foreground hover:bg-white/40 dark:hover:bg-muted/40",
+            )}
+          >
+            <Bot className="size-3.5" />
+            <span>🔬 Specialized Research</span>
+            {isDomainActive("custom") && (
               <span className="size-1.5 rounded-full bg-mint animate-pulse" />
             )}
           </button>
@@ -400,7 +877,12 @@ export function EnterpriseHubView({
                       />
                       <Tooltip
                         formatter={(val: any) => [`₹${Number(val).toLocaleString("en-IN")}`, ""]}
-                        contentStyle={{ borderRadius: "16px", background: "rgba(255,255,255,0.95)", border: "1px solid #A8E3D1", fontSize: "12px" }}
+                        contentStyle={{
+                          borderRadius: "16px",
+                          background: "rgba(255,255,255,0.95)",
+                          border: "1px solid #A8E3D1",
+                          fontSize: "12px",
+                        }}
                       />
                       <Bar dataKey="inflow" fill="#1B4332" radius={[6, 6, 0, 0]} />
                       <Bar dataKey="outflow" fill="#D98E2A" radius={[6, 6, 0, 0]} />
@@ -464,129 +946,50 @@ export function EnterpriseHubView({
         {/* ── TAB 2: SWOT STRATEGIC RADAR ── */}
         {activeTab === "swot" && (
           <div className="space-y-6 animate-in fade-in duration-200">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-white/60 dark:bg-card/60 border border-sage/30 dark:border-border">
-              <div className="flex items-center gap-2">
-                <Target className="size-5 text-mint" />
-                <div>
-                  <h2 className="text-base font-serif font-bold text-forest dark:text-foreground">
-                    Live SWOT Intelligence Radar
-                  </h2>
-                  <p className="text-xs text-muted-foreground">
-                    Researched dynamically via SerpApi for {sector} in {location}
-                  </p>
+            {selectedRecord ? (
+              <div className="space-y-6 animate-in fade-in duration-200">
+                <SelectedRecordBanner record={selectedRecord} onBack={handleBackToList} />
+                <div className="p-6 md:p-8 rounded-3xl bg-white/80 dark:bg-card/80 border border-sage/30 dark:border-border shadow-xs backdrop-blur-xs">
+                  <MarkdownMessage content={getOrSynthesizeMarkdown(selectedRecord)} />
                 </div>
               </div>
-              <button
-                onClick={() => handleAsk(`Run an updated, deep SWOT strategic analysis with actionable growth moves for "${shopName}" (${sector}) in ${location} using SerpApi.`)}
-                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-forest dark:bg-mint text-white dark:text-black text-xs font-bold shadow-xs hover:shadow-md transition-all cursor-pointer"
-              >
-                <Bot className="size-3.5" />
-                <span>{swotData ? "Refresh SWOT Analysis" : "Run Live SWOT Scan"}</span>
-              </button>
-            </div>
-
-            {swotData ? (
-              <>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Strengths */}
-                  <div className="p-5 rounded-3xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200/60 dark:border-emerald-900/50 space-y-3">
-                    <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400 font-bold text-sm">
-                      <CheckCircle2 className="size-4" />
-                      <span>Strengths (ताकत)</span>
-                    </div>
-                    <ul className="space-y-2 text-xs text-foreground/90">
-                      {(swotData.strengths || []).map((item, idx) => (
-                        <li key={idx} className="flex items-start gap-2">
-                          <span className="size-1.5 rounded-full bg-emerald-500 shrink-0 mt-1.5" />
-                          <span>{item}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  {/* Weaknesses */}
-                  <div className="p-5 rounded-3xl bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-900/50 space-y-3">
-                    <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400 font-bold text-sm">
-                      <AlertTriangle className="size-4" />
-                      <span>Weaknesses (कमजोरी)</span>
-                    </div>
-                    <ul className="space-y-2 text-xs text-foreground/90">
-                      {(swotData.weaknesses || []).map((item, idx) => (
-                        <li key={idx} className="flex items-start gap-2">
-                          <span className="size-1.5 rounded-full bg-amber-500 shrink-0 mt-1.5" />
-                          <span>{item}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  {/* Opportunities */}
-                  <div className="p-5 rounded-3xl bg-sky-50/50 dark:bg-sky-950/20 border border-sky-200/60 dark:border-sky-900/50 space-y-3">
-                    <div className="flex items-center gap-2 text-sky-700 dark:text-sky-400 font-bold text-sm">
-                      <TrendingUp className="size-4" />
-                      <span>Opportunities (अवसर)</span>
-                    </div>
-                    <ul className="space-y-2 text-xs text-foreground/90">
-                      {(swotData.opportunities || []).map((item, idx) => (
-                        <li key={idx} className="flex items-start gap-2">
-                          <span className="size-1.5 rounded-full bg-sky-500 shrink-0 mt-1.5" />
-                          <span>{item}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  {/* Threats */}
-                  <div className="p-5 rounded-3xl bg-rose-50/50 dark:bg-rose-950/20 border border-rose-200/60 dark:border-rose-900/50 space-y-3">
-                    <div className="flex items-center gap-2 text-rose-700 dark:text-rose-400 font-bold text-sm">
-                      <Flame className="size-4" />
-                      <span>Threats (चुनौतियां)</span>
-                    </div>
-                    <ul className="space-y-2 text-xs text-foreground/90">
-                      {(swotData.threats || []).map((item, idx) => (
-                        <li key={idx} className="flex items-start gap-2">
-                          <span className="size-1.5 rounded-full bg-rose-500 shrink-0 mt-1.5" />
-                          <span>{item}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-
-                {/* Tactical Action Plan */}
-                {swotData.actionPlan && swotData.actionPlan.length > 0 && (
-                  <div className="p-5 rounded-3xl bg-white/70 dark:bg-card/70 border border-sage/30 dark:border-border space-y-3">
-                    <h3 className="font-serif font-bold text-sm text-forest dark:text-foreground flex items-center gap-2">
-                      <Target className="size-4 text-mint" /> 90-Day Tactical Execution Plan
-                    </h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
-                      {swotData.actionPlan.map((step, idx) => (
-                        <div key={idx} className="p-3.5 rounded-2xl bg-cream/60 dark:bg-muted/40 border border-sage/20 dark:border-border text-xs space-y-1">
-                          <span className="text-[10px] font-bold text-forest dark:text-mint uppercase">Action Move 0{idx + 1}</span>
-                          <p className="text-foreground leading-relaxed">{step}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </>
             ) : (
-              <div className="p-8 rounded-3xl bg-white/60 dark:bg-card/60 border border-sage/30 dark:border-border text-center space-y-3">
-                <Target className="size-8 text-mint mx-auto" />
-                <h3 className="font-serif font-bold text-base text-forest dark:text-foreground">
-                  No SWOT Analysis Run Yet
-                </h3>
-                <p className="text-xs text-muted-foreground max-w-md mx-auto">
-                  AI Saathi will scan real-time market signals via SerpApi to assemble your custom 4-quadrant Strengths, Weaknesses, Opportunities, and Threats matrix.
-                </p>
-                <button
-                  onClick={() => handleAsk(`Run an updated, deep SWOT strategic analysis with actionable growth moves for "${shopName}" (${sector}) in ${location} using SerpApi.`)}
-                  className="px-4 py-2 rounded-xl bg-forest dark:bg-mint text-white dark:text-black text-xs font-bold shadow-xs hover:shadow-md transition-all cursor-pointer inline-flex items-center gap-1.5"
-                >
-                  <TrendingUp className="size-3.5 text-mint dark:text-black" />
-                  <span>Run Live SWOT Scan with SerpApi</span>
-                </button>
-              </div>
+              <>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-white/60 dark:bg-card/60 border border-sage/30 dark:border-border">
+                  <div className="flex items-center gap-2">
+                    <Target className="size-5 text-mint" />
+                    <div>
+                      <h2 className="text-base font-serif font-bold text-forest dark:text-foreground">
+                        Live SWOT Strategic Radar
+                      </h2>
+                      <p className="text-xs text-muted-foreground">
+                        {records.length > 0
+                          ? `${records.length} strategic analysis dossier${records.length > 1 ? "s" : ""} recorded across conversations`
+                          : `Researched dynamically via SerpApi for ${sector} in ${location}`}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleAsk(`Run an updated, deep SWOT strategic analysis with actionable growth moves for "${shopName}" (${sector}) in ${location} using SerpApi.`)}
+                    className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-forest dark:bg-mint text-white dark:text-black text-xs font-bold shadow-xs hover:shadow-md transition-all cursor-pointer"
+                  >
+                    <Bot className="size-3.5" />
+                    <span>Run New SWOT Scan</span>
+                  </button>
+                </div>
+
+                <EnterpriseRecordCardList
+                  records={records}
+                  activeTab={activeTab}
+                  onSelectRecord={handleSelectRecord}
+                  currentPage={currentPage}
+                  onPageChange={setCurrentPage}
+                  emptyTitle="No SWOT Analysis Run Yet"
+                  emptyDesc="AI Saathi will scan real-time market signals via SerpApi to assemble your custom 4-quadrant Strengths, Weaknesses, Opportunities, and Threats matrix."
+                  emptyIcon={Target}
+                  onRunScan={() => handleAsk(`Run an updated, deep SWOT strategic analysis with actionable growth moves for "${shopName}" (${sector}) in ${location} using SerpApi.`)}
+                />
+              </>
             )}
           </div>
         )}
@@ -594,83 +997,47 @@ export function EnterpriseHubView({
         {/* ── TAB 3: GOVT SCHEMES & SUBSIDIES ── */}
         {activeTab === "schemes" && (
           <div className="space-y-6 animate-in fade-in duration-200">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-white/60 dark:bg-card/60 border border-sage/30 dark:border-border">
-              <div>
-                <h2 className="text-base font-serif font-bold text-forest dark:text-foreground">
-                  Government Schemes &amp; Capital Subsidies
-                </h2>
-                <p className="text-xs text-muted-foreground">
-                  Researched live via SerpApi for {sector} in {location}
-                </p>
-              </div>
-              <button
-                onClick={() => handleAsk(`Find all high-subsidy Central and State MSME schemes for my shop "${shopName}" in ${location} using SerpApi. Include eligibility criteria and step-by-step application process.`)}
-                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-forest dark:bg-mint text-white dark:text-black text-xs font-bold shadow-xs hover:shadow-md transition-all cursor-pointer"
-              >
-                <Landmark className="size-3.5" />
-                <span>{creditSchemes.length > 0 ? "Research New Schemes" : "Scan Govt Schemes"}</span>
-              </button>
-            </div>
-
-            {creditSchemes.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {creditSchemes.map((scheme, idx) => (
-                  <div
-                    key={idx}
-                    className="p-5 rounded-3xl bg-white/70 dark:bg-card/70 border border-sage/30 dark:border-border shadow-xs hover:shadow-md transition-all flex flex-col justify-between space-y-4 group"
-                  >
-                    <div className="space-y-2.5">
-                      <div className="flex items-start justify-between gap-2">
-                        <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full border bg-mint-pale dark:bg-mint/15 text-forest dark:text-mint border-mint/30">
-                          {scheme.badge || "Live Verified"}
-                        </span>
-                        <Landmark className="size-4 text-forest dark:text-mint shrink-0" />
-                      </div>
-                      <h3 className="font-serif font-bold text-sm text-forest dark:text-foreground group-hover:text-mint transition-colors">
-                        {scheme.title}
-                      </h3>
-                      <div className="space-y-1 text-xs">
-                        <p className="font-bold text-forest dark:text-mint text-base font-mono">
-                          {scheme.amount || scheme.subsidy}
-                        </p>
-                        {scheme.interest && (
-                          <p className="text-muted-foreground font-medium text-[11px]">
-                            {scheme.interest}
-                          </p>
-                        )}
-                      </div>
-                      <p className="text-[11.5px] text-muted-foreground leading-relaxed">
-                        {scheme.eligibility}
-                      </p>
-                    </div>
-
-                    <button
-                      onClick={() => handleAsk(`Guide me through applying for ${scheme.title} for "${shopName}" in ${location}. Check my Udyam and turnover eligibility.`)}
-                      className="w-full py-2.5 rounded-2xl bg-cream dark:bg-muted hover:bg-mint hover:text-black dark:hover:bg-mint dark:hover:text-black text-xs font-bold text-forest dark:text-foreground transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
-                    >
-                      <Bot className="size-3.5" />
-                      <span>Apply via AI Saathi</span>
-                    </button>
-                  </div>
-                ))}
+            {selectedRecord ? (
+              <div className="space-y-6 animate-in fade-in duration-200">
+                <SelectedRecordBanner record={selectedRecord} onBack={handleBackToList} />
+                <div className="p-6 md:p-8 rounded-3xl bg-white/80 dark:bg-card/80 border border-sage/30 dark:border-border shadow-xs backdrop-blur-xs">
+                  <MarkdownMessage content={getOrSynthesizeMarkdown(selectedRecord)} />
+                </div>
               </div>
             ) : (
-              <div className="p-8 rounded-3xl bg-white/60 dark:bg-card/60 border border-sage/30 dark:border-border text-center space-y-3">
-                <Landmark className="size-8 text-mint mx-auto" />
-                <h3 className="font-serif font-bold text-base text-forest dark:text-foreground">
-                  No Govt Schemes Researched Yet
-                </h3>
-                <p className="text-xs text-muted-foreground max-w-md mx-auto">
-                  Click below to let AI Saathi research real-time Central and State subsidy programs (PMMY Mudra, PMEGP, Stand-Up India, PM Vishwakarma) matching your business profile.
-                </p>
-                <button
-                  onClick={() => handleAsk(`Find all high-subsidy Central and State MSME schemes for my shop "${shopName}" in ${location} using SerpApi. Include eligibility criteria and step-by-step application process.`)}
-                  className="px-4 py-2 rounded-xl bg-forest dark:bg-mint text-white dark:text-black text-xs font-bold shadow-xs hover:shadow-md transition-all cursor-pointer inline-flex items-center gap-1.5"
-                >
-                  <Search className="size-3.5 text-mint dark:text-black" />
-                  <span>Research Schemes via SerpApi</span>
-                </button>
-              </div>
+              <>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-white/60 dark:bg-card/60 border border-sage/30 dark:border-border">
+                  <div>
+                    <h2 className="text-base font-serif font-bold text-forest dark:text-foreground">
+                      Government Schemes &amp; Capital Subsidies
+                    </h2>
+                    <p className="text-xs text-muted-foreground">
+                      {records.length > 0
+                        ? `${records.length} subsidy dossier${records.length > 1 ? "s" : ""} saved across conversations`
+                        : `Researched live via SerpApi for ${sector} in ${location}`}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => handleAsk(`Find all high-subsidy Central and State MSME schemes for my shop "${shopName}" in ${location} using SerpApi. Include eligibility criteria and step-by-step application process.`)}
+                    className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-forest dark:bg-mint text-white dark:text-black text-xs font-bold shadow-xs hover:shadow-md transition-all cursor-pointer"
+                  >
+                    <Landmark className="size-3.5" />
+                    <span>Scan Govt Schemes</span>
+                  </button>
+                </div>
+
+                <EnterpriseRecordCardList
+                  records={records}
+                  activeTab={activeTab}
+                  onSelectRecord={handleSelectRecord}
+                  currentPage={currentPage}
+                  onPageChange={setCurrentPage}
+                  emptyTitle="No Govt Schemes Researched Yet"
+                  emptyDesc="Click below to let AI Saathi research real-time Central and State subsidy programs (PMMY Mudra, PMEGP, Stand-Up India, PM Vishwakarma) matching your business profile."
+                  emptyIcon={Landmark}
+                  onRunScan={() => handleAsk(`Find all high-subsidy Central and State MSME schemes for my shop "${shopName}" in ${location} using SerpApi. Include eligibility criteria and step-by-step application process.`)}
+                />
+              </>
             )}
           </div>
         )}
@@ -678,93 +1045,47 @@ export function EnterpriseHubView({
         {/* ── TAB 4: MANDI ARBITRAGE & LOCAL SUPPLY CHAIN ── */}
         {activeTab === "mandi" && (
           <div className="space-y-6 animate-in fade-in duration-200">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-white/60 dark:bg-card/60 border border-sage/30 dark:border-border">
-              <div>
-                <h2 className="text-base font-serif font-bold text-forest dark:text-foreground">
-                  Regional APMC Mandi Spot Rates &amp; Arbitrage
-                </h2>
-                <p className="text-xs text-muted-foreground">
-                  Live commodity prices and price spread analysis via SerpApi
-                </p>
-              </div>
-              <button
-                onClick={() => handleAsk(`Fetch live APMC Mandi spot rates and find profit arbitrage opportunities for crops and commodities around ${location} using SerpApi.`)}
-                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-forest dark:bg-mint text-white dark:text-black text-xs font-bold shadow-xs hover:shadow-md transition-all cursor-pointer"
-              >
-                <Coins className="size-3.5" />
-                <span>{mandiCommodities.length > 0 ? "Refresh Mandi Rates" : "Fetch Live Mandi Data"}</span>
-              </button>
-            </div>
-
-            {mandiCommodities.length > 0 ? (
-              <div className="overflow-x-auto rounded-3xl border border-sage/20 dark:border-border bg-white/70 dark:bg-card/70">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-cream/60 dark:bg-muted/40 text-muted-foreground uppercase text-[10.5px] border-b border-sage/20 dark:border-border font-semibold">
-                    <tr>
-                      <th className="py-3.5 px-4">Commodity / Variety</th>
-                      <th className="py-3.5 px-4">Mandi Market Yard</th>
-                      <th className="py-3.5 px-4">Daily Arrivals</th>
-                      <th className="py-3.5 px-4">Wholesale Rate</th>
-                      <th className="py-3.5 px-4">24h Trend</th>
-                      <th className="py-3.5 px-4 text-right">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-sage/15 dark:divide-border/40">
-                    {mandiCommodities.map((item, idx) => (
-                      <tr key={idx} className="hover:bg-cream/30 dark:hover:bg-muted/20 transition-colors">
-                        <td className="py-3.5 px-4 font-bold text-foreground">
-                          {item.name}
-                          {item.variety && (
-                            <span className="block text-[11px] font-normal text-muted-foreground">{item.variety}</span>
-                          )}
-                        </td>
-                        <td className="py-3.5 px-4 text-muted-foreground">{item.market || location}</td>
-                        <td className="py-3.5 px-4 text-muted-foreground font-mono">{item.arrivals || "Steady"}</td>
-                        <td className="py-3.5 px-4 font-bold text-forest dark:text-mint font-mono">
-                          {item.modalPrice} <span className="text-[10px] font-normal text-muted-foreground">/{item.unit ? item.unit.split(" ")[1] : "q"}</span>
-                        </td>
-                        <td className="py-3.5 px-4">
-                          <span
-                            className={cn(
-                              "inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10.5px] font-bold font-mono",
-                              item.positive !== false
-                                ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400"
-                                : "bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400"
-                            )}
-                          >
-                            {item.trend}
-                          </span>
-                        </td>
-                        <td className="py-3.5 px-4 text-right">
-                          <button
-                            onClick={() => handleAsk(`Provide procurement advisory and 14-day price forecast for ${item.name} in ${item.market || location}.`)}
-                            className="text-xs font-semibold text-mint hover:underline cursor-pointer"
-                          >
-                            Forecast
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            {selectedRecord ? (
+              <div className="space-y-6 animate-in fade-in duration-200">
+                <SelectedRecordBanner record={selectedRecord} onBack={handleBackToList} />
+                <div className="p-6 md:p-8 rounded-3xl bg-white/80 dark:bg-card/80 border border-sage/30 dark:border-border shadow-xs backdrop-blur-xs">
+                  <MarkdownMessage content={getOrSynthesizeMarkdown(selectedRecord)} />
+                </div>
               </div>
             ) : (
-              <div className="p-8 rounded-3xl bg-white/60 dark:bg-card/60 border border-sage/30 dark:border-border text-center space-y-3">
-                <Coins className="size-8 text-mint mx-auto" />
-                <h3 className="font-serif font-bold text-base text-forest dark:text-foreground">
-                  No Mandi Spot Rates Queried Yet
-                </h3>
-                <p className="text-xs text-muted-foreground max-w-md mx-auto">
-                  Click below to scan official APMC wholesale yards and Agmarknet feeds for crop arrivals and modal prices around {location}.
-                </p>
-                <button
-                  onClick={() => handleAsk(`Fetch live APMC Mandi spot rates and find profit arbitrage opportunities for crops and commodities around ${location} using SerpApi.`)}
-                  className="px-4 py-2 rounded-xl bg-forest dark:bg-mint text-white dark:text-black text-xs font-bold shadow-xs hover:shadow-md transition-all cursor-pointer inline-flex items-center gap-1.5"
-                >
-                  <Search className="size-3.5 text-mint dark:text-black" />
-                  <span>Scan Live APMC Rates via SerpApi</span>
-                </button>
-              </div>
+              <>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-white/60 dark:bg-card/60 border border-sage/30 dark:border-border">
+                  <div>
+                    <h2 className="text-base font-serif font-bold text-forest dark:text-foreground">
+                      Regional APMC Mandi Spot Rates &amp; Arbitrage
+                    </h2>
+                    <p className="text-xs text-muted-foreground">
+                      {records.length > 0
+                        ? `${records.length} mandi price dossier${records.length > 1 ? "s" : ""} saved across conversations`
+                        : `Live commodity prices and price spread analysis via SerpApi`}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => handleAsk(`Fetch live APMC Mandi spot rates and find profit arbitrage opportunities for crops and commodities around ${location} using SerpApi.`)}
+                    className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-forest dark:bg-mint text-white dark:text-black text-xs font-bold shadow-xs hover:shadow-md transition-all cursor-pointer"
+                  >
+                    <Coins className="size-3.5" />
+                    <span>Fetch Live Mandi Data</span>
+                  </button>
+                </div>
+
+                <EnterpriseRecordCardList
+                  records={records}
+                  activeTab={activeTab}
+                  onSelectRecord={handleSelectRecord}
+                  currentPage={currentPage}
+                  onPageChange={setCurrentPage}
+                  emptyTitle="No Mandi Spot Rates Queried Yet"
+                  emptyDesc="Click below to scan official APMC wholesale yards and Agmarknet feeds for crop arrivals and modal prices around your location."
+                  emptyIcon={Coins}
+                  onRunScan={() => handleAsk(`Fetch live APMC Mandi spot rates and find profit arbitrage opportunities for crops and commodities around ${location} using SerpApi.`)}
+                />
+              </>
             )}
           </div>
         )}
@@ -772,86 +1093,47 @@ export function EnterpriseHubView({
         {/* ── TAB 5: COMPETITOR RADAR & MARKET DENSITY ── */}
         {activeTab === "competitors" && (
           <div className="space-y-6 animate-in fade-in duration-200">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-white/60 dark:bg-card/60 border border-sage/30 dark:border-border">
-              <div>
-                <h2 className="text-base font-serif font-bold text-forest dark:text-foreground">
-                  Google Maps Competitor Radar
-                </h2>
-                <p className="text-xs text-muted-foreground">
-                  Scanned live via SerpApi Google Maps around {location}
-                </p>
-              </div>
-              <button
-                onClick={() => handleAsk(`Perform a real-time SerpApi Google Maps competitor scan for ${sector} shops around ${location}. List competitors with ratings, reviews, distance, and unique competitive advantages.`)}
-                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-forest dark:bg-mint text-white dark:text-black text-xs font-bold shadow-xs hover:shadow-md transition-all cursor-pointer"
-              >
-                <Store className="size-3.5" />
-                <span>{competitorData.length > 0 ? "Rescan Competitors" : "Run Maps Competitor Scan"}</span>
-              </button>
-            </div>
-
-            {competitorData.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {competitorData.map((comp, idx) => (
-                  <div
-                    key={idx}
-                    className="p-5 rounded-3xl bg-white/70 dark:bg-card/70 border border-sage/30 dark:border-border shadow-xs space-y-3"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <h4 className="font-serif font-bold text-sm text-forest dark:text-foreground">
-                          {comp.name}
-                        </h4>
-                        <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                          <MapPin className="size-3 text-mint" />
-                          <span>{comp.distance}</span>
-                        </p>
-                      </div>
-                      <span className="text-xs font-bold px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-700 dark:text-amber-400">
-                        ★ {comp.rating}
-                      </span>
-                    </div>
-
-                    <div className="space-y-1 text-xs">
-                      <div className="flex justify-between text-muted-foreground">
-                        <span>Pricing Stance:</span>
-                        <span className="font-semibold text-foreground">{comp.priceRange || "Competitive"}</span>
-                      </div>
-                      <div className="flex justify-between text-muted-foreground">
-                        <span>Market Threat:</span>
-                        <span className={cn(
-                          "font-bold",
-                          comp.threatLevel === "High" ? "text-rose-500" : comp.threatLevel === "Medium" ? "text-amber-500" : "text-emerald-500"
-                        )}>
-                          {comp.threatLevel || "Medium"}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="p-2.5 rounded-xl bg-cream/60 dark:bg-muted/40 text-[11.5px] text-muted-foreground">
-                      <span className="font-semibold text-foreground">Differentiator: </span>
-                      {comp.differentiator}
-                    </div>
-                  </div>
-                ))}
+            {selectedRecord ? (
+              <div className="space-y-6 animate-in fade-in duration-200">
+                <SelectedRecordBanner record={selectedRecord} onBack={handleBackToList} />
+                <div className="p-6 md:p-8 rounded-3xl bg-white/80 dark:bg-card/80 border border-sage/30 dark:border-border shadow-xs backdrop-blur-xs">
+                  <MarkdownMessage content={getOrSynthesizeMarkdown(selectedRecord)} />
+                </div>
               </div>
             ) : (
-              <div className="p-8 rounded-3xl bg-white/60 dark:bg-card/60 border border-sage/30 dark:border-border text-center space-y-3">
-                <Store className="size-8 text-mint mx-auto" />
-                <h3 className="font-serif font-bold text-base text-forest dark:text-foreground">
-                  No Competitor Scans Logged Yet
-                </h3>
-                <p className="text-xs text-muted-foreground max-w-md mx-auto">
-                  Click below to scan nearby businesses, customer ratings, price tiers, and competitive moats using SerpApi Google Maps grounding.
-                </p>
-                <button
-                  onClick={() => handleAsk(`Perform a real-time SerpApi Google Maps competitor scan for ${sector} shops around ${location}. List competitors with ratings, reviews, distance, and unique competitive advantages.`)}
-                  className="px-4 py-2 rounded-xl bg-forest dark:bg-mint text-white dark:text-black text-xs font-bold shadow-xs hover:shadow-md transition-all cursor-pointer inline-flex items-center gap-1.5"
-                >
-                  <Search className="size-3.5 text-mint dark:text-black" />
-                  <span>Scan Google Maps via SerpApi</span>
-                </button>
-              </div>
+              <>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-white/60 dark:bg-card/60 border border-sage/30 dark:border-border">
+                  <div>
+                    <h2 className="text-base font-serif font-bold text-forest dark:text-foreground">
+                      Google Maps Competitor Radar
+                    </h2>
+                    <p className="text-xs text-muted-foreground">
+                      {records.length > 0
+                        ? `${records.length} competitor radar scan${records.length > 1 ? "s" : ""} saved across conversations`
+                        : `Scanned live via SerpApi Google Maps around ${location}`}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => handleAsk(`Perform a real-time SerpApi Google Maps competitor scan for ${sector} shops around ${location}. List competitors with ratings, reviews, distance, and unique competitive advantages.`)}
+                    className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-forest dark:bg-mint text-white dark:text-black text-xs font-bold shadow-xs hover:shadow-md transition-all cursor-pointer"
+                  >
+                    <Store className="size-3.5" />
+                    <span>Run Maps Competitor Scan</span>
+                  </button>
+                </div>
+
+                <EnterpriseRecordCardList
+                  records={records}
+                  activeTab={activeTab}
+                  onSelectRecord={handleSelectRecord}
+                  currentPage={currentPage}
+                  onPageChange={setCurrentPage}
+                  emptyTitle="No Competitor Scans Logged Yet"
+                  emptyDesc="Click below to scan nearby businesses, customer ratings, price tiers, and competitive moats using SerpApi Google Maps grounding."
+                  emptyIcon={Store}
+                  onRunScan={() => handleAsk(`Perform a real-time SerpApi Google Maps competitor scan for ${sector} shops around ${location}. List competitors with ratings, reviews, distance, and unique competitive advantages.`)}
+                />
+              </>
             )}
           </div>
         )}
@@ -859,70 +1141,141 @@ export function EnterpriseHubView({
         {/* ── TAB 6: CREDIT & BORROWING HEADROOM ── */}
         {activeTab === "credit" && (
           <div className="space-y-6 animate-in fade-in duration-200">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-white/60 dark:bg-card/60 border border-sage/30 dark:border-border">
-              <div>
-                <h2 className="text-base font-serif font-bold text-forest dark:text-foreground">
-                  Credit Readiness &amp; Loan Headroom
-                </h2>
-                <p className="text-xs text-muted-foreground">
-                  Grounds your cash flow scale ({turnover}) and debt coverage
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <Link
-                  href="/credit"
-                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border border-sage/40 dark:border-border bg-white dark:bg-card hover:bg-cream dark:hover:bg-muted text-forest dark:text-foreground text-xs font-semibold shadow-xs"
-                >
-                  <CreditCard className="size-3.5 text-mint" />
-                  <span>Full Credit Dossier</span>
-                </Link>
-                <Link
-                  href="/emi"
-                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-forest dark:bg-mint text-white dark:text-black text-xs font-bold shadow-xs hover:shadow-md"
-                >
-                  <Calculator className="size-3.5 text-mint dark:text-black" />
-                  <span>Interactive EMI Simulator</span>
-                </Link>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="p-6 rounded-3xl bg-white/70 dark:bg-card/70 border border-sage/30 dark:border-border shadow-xs space-y-3">
-                <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">
-                  Bureau Score Estimate
-                </span>
-                <div className="text-3xl font-serif font-bold text-forest dark:text-mint">
-                  {creditData?.estimatedCibilScore || 775} / 900
+            {selectedRecord ? (
+              <div className="space-y-6 animate-in fade-in duration-200">
+                <SelectedRecordBanner record={selectedRecord} onBack={handleBackToList} />
+                <div className="p-6 md:p-8 rounded-3xl bg-white/80 dark:bg-card/80 border border-sage/30 dark:border-border shadow-xs backdrop-blur-xs">
+                  <MarkdownMessage content={getOrSynthesizeMarkdown(selectedRecord)} />
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Prime tier status unlocks 1.5% - 2.0% interest rate rebate on MSME loans.
-                </p>
               </div>
-
-              <div className="p-6 rounded-3xl bg-white/70 dark:bg-card/70 border border-sage/30 dark:border-border shadow-xs space-y-3">
-                <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">
-                  Debt-Service Coverage Ratio (DSCR)
-                </span>
-                <div className="text-3xl font-serif font-bold text-forest dark:text-mint">
-                  {creditData?.dscr || "2.8x"}
+            ) : (
+              <>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-white/60 dark:bg-card/60 border border-sage/30 dark:border-border">
+                  <div>
+                    <h2 className="text-base font-serif font-bold text-forest dark:text-foreground">
+                      Credit Readiness &amp; Loan Headroom
+                    </h2>
+                    <p className="text-xs text-muted-foreground">
+                      {records.length > 0
+                        ? `${records.length} credit evaluation dossier${records.length > 1 ? "s" : ""} recorded across conversations`
+                        : `Grounds your cash flow scale (${turnover}) and debt coverage`}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Link
+                      href="/credit"
+                      className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border border-sage/40 dark:border-border bg-white dark:bg-card hover:bg-cream dark:hover:bg-muted text-forest dark:text-foreground text-xs font-semibold shadow-xs"
+                    >
+                      <CreditCard className="size-3.5 text-mint" />
+                      <span>Full Credit Dossier</span>
+                    </Link>
+                    <Link
+                      href="/emi"
+                      className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-forest dark:bg-mint text-white dark:text-black text-xs font-bold shadow-xs hover:shadow-md"
+                    >
+                      <Calculator className="size-3.5 text-mint dark:text-black" />
+                      <span>Interactive EMI Simulator</span>
+                    </Link>
+                  </div>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Net disposable monthly surplus comfortably supports up to ₹45,000 monthly debt EMI.
-                </p>
-              </div>
 
-              <div className="p-6 rounded-3xl bg-white/70 dark:bg-card/70 border border-sage/30 dark:border-border shadow-xs space-y-3">
-                <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">
-                  Recommended Loan Headroom
-                </span>
-                <div className="text-3xl font-serif font-bold text-forest dark:text-mint">
-                  {creditData?.maxRecommendedLoan || "₹25,00,000"}
+                {records.length > 0 ? (
+                  <EnterpriseRecordCardList
+                    records={records}
+                    activeTab={activeTab}
+                    onSelectRecord={handleSelectRecord}
+                    currentPage={currentPage}
+                    onPageChange={setCurrentPage}
+                  />
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="p-6 rounded-3xl bg-white/70 dark:bg-card/70 border border-sage/30 dark:border-border shadow-xs space-y-3">
+                      <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">
+                        Bureau Score Estimate
+                      </span>
+                      <div className="text-3xl font-serif font-bold text-forest dark:text-mint">
+                        {creditData?.estimatedCibilScore || 775} / 900
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Prime tier status unlocks 1.5% - 2.0% interest rate rebate on MSME loans.
+                      </p>
+                    </div>
+
+                    <div className="p-6 rounded-3xl bg-white/70 dark:bg-card/70 border border-sage/30 dark:border-border shadow-xs space-y-3">
+                      <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">
+                        Debt-Service Coverage Ratio (DSCR)
+                      </span>
+                      <div className="text-3xl font-serif font-bold text-forest dark:text-mint">
+                        {creditData?.dscr || "2.8x"}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Net disposable monthly surplus comfortably supports up to ₹45,000 monthly debt EMI.
+                      </p>
+                    </div>
+
+                    <div className="p-6 rounded-3xl bg-white/70 dark:bg-card/70 border border-sage/30 dark:border-border shadow-xs space-y-3">
+                      <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">
+                        Recommended Loan Headroom
+                      </span>
+                      <div className="text-3xl font-serif font-bold text-forest dark:text-mint">
+                        {creditData?.maxRecommendedLoan || "₹25,00,000"}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Optimal leverage capacity without over-straining shop cash balances.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        {/* ── TAB 7: SPECIALIZED AUTONOMOUS SUB-AGENTS ── */}
+        {activeTab === "custom" && (
+          <div className="space-y-6 animate-in fade-in duration-200">
+            {selectedRecord ? (
+              <div className="space-y-6 animate-in fade-in duration-200">
+                <SelectedRecordBanner record={selectedRecord} onBack={handleBackToList} />
+                <div className="p-6 md:p-8 rounded-3xl bg-white/80 dark:bg-card/80 border border-sage/30 dark:border-border shadow-xs backdrop-blur-xs">
+                  <MarkdownMessage content={getOrSynthesizeMarkdown(selectedRecord)} />
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Optimal leverage capacity without over-straining shop cash balances.
-                </p>
               </div>
-            </div>
+            ) : (
+              <>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-white/60 dark:bg-card/60 border border-sage/30 dark:border-border">
+                  <div>
+                    <h2 className="text-base font-serif font-bold text-forest dark:text-foreground">
+                      Specialized Autonomous Sub-Agents
+                    </h2>
+                    <p className="text-xs text-muted-foreground">
+                      {records.length > 0
+                        ? `${records.length} specialized domain dossier${records.length > 1 ? "s" : ""} saved across conversations`
+                        : "Dynamic sub-agents spawned for specialized deep research"}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => handleAsk(`Run an autonomous specialized research sub-agent for ${sector} in ${location} with deep market metrics, supply chain economics, and feasibility analysis.`)}
+                    className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-forest dark:bg-mint text-white dark:text-black text-xs font-bold shadow-xs hover:shadow-md transition-all cursor-pointer"
+                  >
+                    <Bot className="size-3.5" />
+                    <span>Spawn Specialized Agent</span>
+                  </button>
+                </div>
+
+                <EnterpriseRecordCardList
+                  records={records}
+                  activeTab={activeTab}
+                  onSelectRecord={handleSelectRecord}
+                  currentPage={currentPage}
+                  onPageChange={setCurrentPage}
+                  emptyTitle="No Specialized Reports Yet"
+                  emptyDesc="Specialized sub-agents spawned in chat or voice will archive their complete research dossiers here."
+                  emptyIcon={Bot}
+                  onRunScan={() => handleAsk(`Run an autonomous specialized research sub-agent for ${sector} in ${location} with deep market metrics, supply chain economics, and feasibility analysis.`)}
+                />
+              </>
+            )}
           </div>
         )}
       </div>

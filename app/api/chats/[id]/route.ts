@@ -11,15 +11,10 @@ export async function GET(
     const { id } = await params;
     const conversation = chatStore.getConversation(id);
     if (!conversation) {
-      return NextResponse.json({
-        conversation: {
-          id,
-          title: "New Chat",
-          messages: [],
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-        },
-      });
+      return NextResponse.json(
+        { error: "Conversation not found" },
+        { status: 404 }
+      );
     }
     const messages = chatStore.getMessages(id);
     return NextResponse.json({ conversation: { ...conversation, messages } });

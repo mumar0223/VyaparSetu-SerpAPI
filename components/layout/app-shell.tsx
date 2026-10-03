@@ -12,6 +12,13 @@ import {
   type BusinessProfile,
   type ConversationRecord,
 } from "@/lib/db";
+import {
+  getPersistedSidebarOpen,
+  persistSidebarOpen,
+  getCachedConversations,
+  setCachedConversations,
+  CONVERSATIONS_UPDATED_EVENT,
+} from "@/lib/sidebar-state";
 import { PanelLeftOpen, Store, Edit2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { ConversationSummary } from "@/components/chat/types";
@@ -28,29 +35,35 @@ export function AppShell({
   activeChatId = null,
 }: AppShellProps) {
   const router = useRouter();
-  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [conversations, setConversations] = useState<ConversationSummary[]>(
+    () => getCachedConversations() || [],
+  );
+  const [isSidebarOpen, setIsSidebarOpenRaw] = useState(() => getPersistedSidebarOpen());
+  const setIsSidebarOpen = useCallback((open: boolean | ((prev: boolean) => boolean)) => {
+    setIsSidebarOpenRaw((prev) => {
+      const next = typeof open === "function" ? open(prev) : open;
+      persistSidebarOpen(next);
+      return next;
+    });
+  }, []);
   const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
   const [isProfileDialogOpen, setIsProfileDialogOpen] = useState(false);
 
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      setIsSidebarOpen(window.innerWidth >= 1024);
-    }
-  }, []);
-
   const loadData = useCallback(async () => {
     try {
-      const list = await getAllConversations();
-      setConversations(
-        list.map((c) => ({
+      // If we don't have conversations in cache, load them
+      if (!getCachedConversations()) {
+        const list = await getAllConversations();
+        const mapped = list.map((c) => ({
           id: c.id,
           title: c.title,
           pinned: c.pinned,
           createdAt: new Date(c.createdAt).toISOString(),
           updatedAt: new Date(c.updatedAt).toISOString(),
-        }))
-      );
+        }));
+        setCachedConversations(mapped);
+        setConversations(mapped);
+      }
       const profile = await getActiveBusinessProfile();
       setBusinessProfile(profile);
     } catch (err) {
@@ -61,6 +74,12 @@ export function AppShell({
   useEffect(() => {
     loadData();
 
+    const handleConversationsUpdated = (e: any) => {
+      if (e.detail && Array.isArray(e.detail)) {
+        setConversations(e.detail);
+      }
+    };
+
     const handleProfileUpdate = (e: any) => {
       setBusinessProfile(e.detail);
     };
@@ -68,10 +87,12 @@ export function AppShell({
       setBusinessProfile(null);
     };
 
+    window.addEventListener(CONVERSATIONS_UPDATED_EVENT, handleConversationsUpdated);
     window.addEventListener("vyaparsetu:profile-updated", handleProfileUpdate);
     window.addEventListener("vyaparsetu:profile-cleared", handleProfileClear);
 
     return () => {
+      window.removeEventListener(CONVERSATIONS_UPDATED_EVENT, handleConversationsUpdated);
       window.removeEventListener("vyaparsetu:profile-updated", handleProfileUpdate);
       window.removeEventListener("vyaparsetu:profile-cleared", handleProfileClear);
     };
@@ -79,21 +100,23 @@ export function AppShell({
 
   const handleDeleteChat = async (id: string) => {
     await idbDeleteConversation(id);
-    setConversations((prev) => prev.filter((c) => c.id !== id));
+    const updated = conversations.filter((c) => c.id !== id);
+    setCachedConversations(updated);
+    setConversations(updated);
   };
 
   const handleRenameChat = async (id: string, newTitle: string) => {
     await idbUpdateConversation(id, { title: newTitle });
-    setConversations((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, title: newTitle } : c))
-    );
+    const updated = conversations.map((c) => (c.id === id ? { ...c, title: newTitle } : c));
+    setCachedConversations(updated);
+    setConversations(updated);
   };
 
   const handleTogglePin = async (id: string, pinned: boolean) => {
     await idbUpdateConversation(id, { pinned });
-    setConversations((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, pinned } : c))
-    );
+    const updated = conversations.map((c) => (c.id === id ? { ...c, pinned } : c));
+    setCachedConversations(updated);
+    setConversations(updated);
   };
 
   return (
@@ -103,7 +126,7 @@ export function AppShell({
         conversations={conversations}
         activeChatId={activeChatId}
         isOpen={isSidebarOpen}
-        onToggle={() => setIsSidebarOpen(!isSidebarOpen)}
+        onToggle={() => setIsSidebarOpen((prev) => !prev)}
         onSelectChat={(id) => {
           router.push(`/c/${id}`);
         }}
@@ -169,3 +192,4 @@ export function AppShell({
     </div>
   );
 }
+

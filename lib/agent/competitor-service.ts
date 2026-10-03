@@ -1,7 +1,7 @@
 import { getLanguageModel } from "@/lib/agent/ai-provider";
 import { generateText } from "ai";
 import { getUdyamDistrictIntelligence } from "@/lib/api/datagov";
-import { searchGoogleMaps, type GoogleMapsPlace } from "./serpapi-service";
+import { searchGoogleMaps, searchGoogleWeb, type GoogleMapsPlace } from "./serpapi-service";
 
 export interface CompetitorShop {
   name: string;
@@ -270,7 +270,7 @@ Business Name: ${businessName || "Local Enterprise"}`,
 /**
  * Search live directories & Google Maps for businesses in the specified category & area.
  * Priority 1: SerpApi Google Maps (Real verified shops, coordinates, star ratings, reviews, phone).
- * Priority 2: Exa Neural Directory Search (Web directory fallback).
+ * Priority 2: SerpApi Google Web Search (Web directory fallback).
  */
 async function searchWebForCompetitors(
   category: string,
@@ -357,8 +357,7 @@ async function searchWebForCompetitors(
     }
   }
 
-  const exaKey = process.env.EXA_API_KEY;
-  if (exaKey && snippets.length < 5) {
+  if (snippets.length < 5) {
     const queries = [
       `${category} shops outlets businesses in and near ${location}`,
       `popular local ${category} opposite near landmark ${location}`,
@@ -366,32 +365,14 @@ async function searchWebForCompetitors(
 
     for (const q of queries.slice(0, 2)) {
       try {
-        const res = await fetch("https://api.exa.ai/search", {
-          method: "POST",
-          headers: {
-            "x-api-key": exaKey,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            query: q,
-            numResults: 6,
-            useAutoprompt: true,
-          }),
-          signal: AbortSignal.timeout(7000),
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          (data.results || []).forEach((r: any) => {
-            const title = r.title || "";
-            const text = r.text || r.snippet || "";
-            if (title || text) {
-              snippets.push(`[Directory Listing - ${title}]: ${text.slice(0, 300)}`);
-            }
-          });
+        const serpResults = await searchGoogleWeb(q, 6);
+        for (const r of serpResults) {
+          if (r.title || r.snippet) {
+            snippets.push(`[Directory Listing - ${r.title}]: ${r.snippet.slice(0, 300)}`);
+          }
         }
       } catch (err: any) {
-        console.warn("[competitor-service] Exa search error:", err?.message);
+        console.warn("[competitor-service] SerpApi web fallback error:", err?.message);
       }
     }
   }
@@ -477,7 +458,7 @@ export async function searchCompetitorsIntelligence(
     ]);
 
   const matchedSector =
-    udyamIntelligence.topSectors.find((s) =>
+    udyamIntelligence.topSectors.find((s: any) =>
       resolvedCategory.toLowerCase().includes(s.sector.toLowerCase())
     ) || udyamIntelligence.topSectors[0];
 
@@ -507,7 +488,7 @@ Return ONLY pure valid JSON with NO markdown code-blocks or backticks.`;
       googlePlaces.length > 0
         ? googlePlaces
             .slice(0, 25)
-            .map((p, idx) => {
+            .map((p: any, idx: number) => {
               let dist = "";
               if (lat && lon && p.latitude && p.longitude) {
                 const d = calculateDistanceKm(lat, lon, p.latitude, p.longitude);
@@ -571,10 +552,10 @@ Return JSON strictly matching this schema with up to 15 competitors:
     }
 
     const validPlaces = googlePlaces.filter(
-      (p) => typeof p.latitude === "number" && typeof p.longitude === "number"
+      (p: any) => typeof p.latitude === "number" && typeof p.longitude === "number"
     );
 
-    const allPlaces: CompetitorShop[] = validPlaces.map((p) => {
+    const allPlaces: CompetitorShop[] = validPlaces.map((p: any) => {
       let distStr = "Within catchment";
       if (lat && lon && p.latitude && p.longitude) {
         const d = calculateDistanceKm(lat, lon, p.latitude, p.longitude);

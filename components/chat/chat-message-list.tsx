@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThinkingAccordion } from "./thinking-accordion";
+import { SwarmTabsCard } from "./swarm-tabs-card";
 import { MarkdownMessage } from "./markdown-message";
 import type { ChatMessage, ToolCallItem } from "./types";
 import type { ArtifactPayload } from "./artifact-modal";
@@ -273,17 +274,12 @@ export function ChatMessageList({
         const imageRows = chunkImageRows(images);
         const isCompact = images.length > 6;
 
-        // Extract ONLY visual staged document artifacts and charts/forms
-        // Data-gathering subagents (getMandiArbitrage, runSWOTScan, etc.) stay in the Thinking Accordion!
+        // Extract ONLY visual staged document artifacts and charts/forms (e.g. stageDocument, stageForm, stageChart)
+        // All swarm intelligence sub-agents (Radar, Mandi, SWOT, Schemes, Credit, ONDC, District, Custom Research)
+        // are strictly rendered inside SwarmTabsCard and must never leak as duplicate inline documents!
         const artifacts: ArtifactPayload[] = [];
         (msg.toolCalls || []).forEach((tc) => {
-          if (
-            tc.toolName === "getMandiArbitrage" ||
-            tc.toolName === "runSWOTScan" ||
-            tc.toolName === "scanCatchmentRadar" ||
-            tc.toolName === "evaluateGovtSchemes" ||
-            tc.toolName === "evaluateCreditAndEMI"
-          ) {
+          if (!tc.toolName.startsWith("stage")) {
             return;
           }
           const res = tc.result as any;
@@ -450,6 +446,14 @@ export function ChatMessageList({
                   toolCalls={msg.toolCalls}
                   completedDurationSeconds={msg.thoughtDurationSeconds}
                 />
+
+                {/* Sub-Agent Swarm Intelligence Tabs & Visual Domain View */}
+                {Array.isArray(msg.toolCalls) && msg.toolCalls.length > 0 && (
+                  <SwarmTabsCard
+                    toolCalls={msg.toolCalls}
+                    onOpenArtifact={onOpenArtifact}
+                  />
+                )}
 
                 {/* Sleek Claude-Style Interactive Artifact Pill or Inline Document */}
                 {artifacts.length > 0 && (

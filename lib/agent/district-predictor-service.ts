@@ -2,6 +2,7 @@ import { getLanguageModel } from "@/lib/agent/ai-provider";
 import { generateText, tool, isStepCount } from "ai";
 import { z } from "zod";
 import { fetchDistrictMandiRates, getUdyamDistrictIntelligence } from "@/lib/api/datagov";
+import { searchGoogleWeb } from "@/lib/agent/serpapi-service";
 
 export interface PredictedBusinessCard {
   id: string;
@@ -64,68 +65,16 @@ export interface PredictDistrictParams {
 const districtPredictionCache = new Map<string, { timestamp: number; data: DistrictPredictionResult }>();
 
 /**
- * Executes a live web search using Exa AI neural search with fallback to standard web fetch.
+ * Executes a live web search using SerpApi Google Search.
  */
 async function executeLiveWebSearch(query: string): Promise<string[]> {
-  const snippets: string[] = [];
-  const exaKey = process.env.EXA_API_KEY;
-
-  if (exaKey) {
-    try {
-      const res = await fetch("https://api.exa.ai/search", {
-        method: "POST",
-        headers: {
-          "x-api-key": exaKey,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          query,
-          numResults: 4,
-          useAutoprompt: true,
-        }),
-        signal: AbortSignal.timeout(7000),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        for (const item of data.results || []) {
-          const text = item.text || item.snippet || item.title || "";
-          if (text) {
-            snippets.push(`${item.title}: ${text.slice(0, 300)}`);
-          }
-        }
-      }
-    } catch (e: any) {
-      console.warn("[district-predictor] Exa search error:", e?.message);
-    }
+  try {
+    const results = await searchGoogleWeb(query, 5);
+    return results.map((r) => `${r.title}: ${r.snippet}`);
+  } catch (e: any) {
+    console.warn("[district-predictor] SerpApi web search error:", e?.message);
+    return [];
   }
-
-  if (snippets.length === 0) {
-    try {
-      const ddgUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
-      const res = await fetch(ddgUrl, {
-        headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        },
-        signal: AbortSignal.timeout(5000),
-      });
-      if (res.ok) {
-        const html = await res.text();
-        const snippetMatches = html.match(/class="result__snippet[^>]*>([\s\S]*?)<\/a>/gi) || [];
-        for (const match of snippetMatches.slice(0, 3)) {
-          const clean = match.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
-          if (clean.length > 20) {
-            snippets.push(clean);
-          }
-        }
-      }
-    } catch (e: any) {
-      console.warn("[district-predictor] Fallback web search warning:", e?.message);
-    }
-  }
-
-  return snippets;
 }
 
 /**

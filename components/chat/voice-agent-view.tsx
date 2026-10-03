@@ -31,6 +31,7 @@ import {
   Coins,
   Store,
   CreditCard,
+  Compass,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { SupportedLanguageCode } from "@/lib/agent/chat-config";
@@ -930,6 +931,9 @@ export const VoiceAgentView = React.memo(function VoiceAgentView({
                 {(activeArtifact.artifactType === "emi_calculator" || activeArtifact.artifactType === "credit") && (
                   <CreditCard className="size-4" />
                 )}
+                {activeArtifact.artifactType === "swarm_dossier" && (
+                  <Compass className="size-4" />
+                )}
                 {activeArtifact.artifactType === "delete_record" && (
                   <AlertTriangle className="size-4 text-rose-500" />
                 )}
@@ -937,7 +941,7 @@ export const VoiceAgentView = React.memo(function VoiceAgentView({
                   "chart", "budget", "expense", "transaction", "saving_goal",
                   "debt", "form", "document", "mandi_arbitrage", "mandi",
                   "govt_schemes", "schemes", "swot_matrix", "swot",
-                  "catchment_radar", "competitors", "emi_calculator", "credit", "delete_record"
+                  "catchment_radar", "competitors", "emi_calculator", "credit", "swarm_dossier", "delete_record"
                 ].includes(activeArtifact.artifactType) && (
                   <FileText className="size-4" />
                 )}
