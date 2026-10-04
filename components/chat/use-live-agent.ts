@@ -1171,9 +1171,84 @@ export function useLiveAgent(options: LiveAgentOptions = {}) {
                     }
                     collectedToolCalls.push({
                       toolName: data.toolName,
+                      toolCallId: data.toolCallId,
+                      summary: data.summary,
+                      status: "calling",
+                    });
+                  } else if (event === "tool_result_delta") {
+                    const toolCallId = data.toolCallId;
+                    const idx = collectedToolCalls.findIndex((t) =>
+                      toolCallId
+                        ? t.toolCallId === toolCallId
+                        : data.toolName
+                        ? t.toolName === data.toolName
+                        : false,
+                    );
+                    const incomingContent = data.replace
+                      ? (data.content ?? "")
+                      : (data.delta || data.content || "");
+
+                    if (idx >= 0) {
+                      const existing = collectedToolCalls[idx];
+                      const prevRes = (existing.result as any) || {};
+                      const prevData = prevRes.data || {};
+                      const prevContent = prevData.content || prevRes.content || "";
+                      const newContent = data.replace
+                        ? incomingContent
+                        : prevContent + incomingContent;
+
+                      collectedToolCalls[idx] = {
+                        ...existing,
+                        args: data.args || existing.args,
+                        status: "calling",
+                        result: {
+                          ...prevRes,
+                          isArtifact: true,
+                          content: newContent,
+                          data: {
+                            ...prevData,
+                            content: newContent,
+                          },
+                        },
+                      };
+                    } else {
+                      collectedToolCalls.push({
+                        toolName: data.toolName || "subagent",
+                        toolCallId,
+                        args: data.args,
+                        status: "calling",
+                        summary: `Generating ${data.toolName || "intelligence"}...`,
+                        result: {
+                          isArtifact: true,
+                          content: incomingContent,
+                          data: {
+                            content: incomingContent,
+                          },
+                        },
+                      });
+                    }
+                  } else if (event === "tool_result") {
+                    const toolCallId = data.toolCallId;
+                    const idx = collectedToolCalls.findIndex((t) =>
+                      toolCallId
+                        ? t.toolCallId === toolCallId
+                        : data.toolName
+                        ? t.toolName === data.toolName
+                        : false,
+                    );
+                    const item: ToolCallItem = {
+                      toolName: data.toolName,
+                      toolCallId,
+                      args: data.args || (idx >= 0 ? collectedToolCalls[idx].args : undefined),
                       summary: data.summary,
                       status: "completed",
-                    });
+                      result: data.result,
+                    };
+                    if (idx >= 0) {
+                      collectedToolCalls[idx] = item;
+                    } else {
+                      collectedToolCalls.push(item);
+                    }
                   } else if (event === "artifact") {
                     const art: ArtifactPayload = {
                       artifactId: data.artifactId,

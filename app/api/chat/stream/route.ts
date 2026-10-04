@@ -85,9 +85,10 @@ export async function POST(req: NextRequest) {
       files: serializedFiles,
     });
 
-    // 3. Prepare AI execution and tools
+    let emitToolDelta: (d: any) => void = () => {};
     const tools = getAgentTools({
       conversationId: activeConversationId,
+      onToolDelta: (d) => emitToolDelta(d),
     });
 
     const model = getLanguageModel(
@@ -177,7 +178,82 @@ You are the Head AI orchestrator (Gemini 3.7 Flash). Dynamically reason through 
 CRITICAL SUB-AGENT INDEPENDENT RENDERING & HEAD AI EXECUTIVE SYNTHESIS:
 - Every awakened sub-agent autonomously generates and renders its own rich visual Markdown (including Leaflet Maps, Mermaid diagrams, Recharts charts, and KPI summary cards) directly in the unified Swarm Tab Card without waiting.
 - Therefore, DO NOT duplicate raw data tables, repetitive shop listings, or lengthy breakdowns in your conversational response text!
-- Your conversational output is delivered to both the chat UI and the real-time Voice Agent: Keep it to a crisp, high-level 2-3 sentence executive synthesis highlighting the key decision, best price/spread/verdict, and directing the user to the interactive tab cards and visual map above.`;
+- Your conversational output is delivered to both the chat UI and the real-time Voice Agent: Keep it to a crisp, high-level 2-3 sentence executive synthesis highlighting the key decision, best price/spread/verdict, and directing the user to the interactive tab cards and visual map above.
+
+VISUAL MARKDOWN EXTENSIONS & RENDERING SPECIFICATION (MANDATORY FOR ALL RESPONSES & ARTIFACTS):
+You and all sub-agents have access to real-time interactive widgets rendered natively in the frontend. Use the EXACT markdown code block for each scenario:
+
+1. NUMERICAL DATA, RATES, COMPARISONS & PRICE DISTRIBUTIONS (USE \`\`\`chart):
+   Whenever comparing rates across yards, bank interest rates, market shares, or cost distributions, ALWAYS emit a fenced \`\`\`chart JSON block.
+   CRITICAL RULE: NEVER use Mermaid for charts or bar graphs! Mermaid xychart is strictly forbidden. ALWAYS use \`\`\`chart.
+   Example:
+   \`\`\`chart
+   {
+     "chartType": "bar",
+     "title": "APMC Modal Prices by Market Yard (₹/Quintal)",
+     "unit": "₹",
+     "data": [
+       { "name": "Guntur APMC", "price": 1850 },
+       { "name": "Kurnool APMC", "price": 1550 },
+       { "name": "Lasalgaon APMC", "price": 1420 },
+       { "name": "Indore APMC", "price": 2480 },
+       { "name": "Khandwa APMC", "price": 2450 }
+     ],
+     "xKey": "name",
+     "series": [
+       { "key": "price", "name": "Modal Price (₹/Qtl)", "color": "#10b981" }
+     ]
+   }
+   \`\`\`
+
+2. WORKFLOWS, PIPELINES, DECISION TREES & ARCHITECTURE (USE \`\`\`mermaid):
+   Mermaid is ONLY for process workflows, onboarding lifecycles, and architecture diagrams using 'graph TD', 'graph LR', or 'sequenceDiagram'.
+   Example:
+   \`\`\`mermaid
+   graph LR
+       A[Wholesale APMC Mandi] -->|Direct B2B Procurement 8-12% Discount| B[My Enterprise]
+       B -->|Seller Network 3-5% Fee| C[ONDC Seller Platform]
+       C -->|Buyer Apps: Paytm / PhonePe| D[Retail Consumers]
+   \`\`\`
+
+3. DYNAMIC SIMULATORS & INTERACTIVE SLIDERS (USE \`\`\`calculator):
+   Whenever the user can adjust financial or operational variables (capex, margin, freight, subsidy %, loan tenure), emit an interactive calculator.
+   Example:
+   \`\`\`calculator
+   {
+     "title": "Inter-Mandi Transport Arbitrage Simulator",
+     "description": "Adjust freight distance and purchase rate to simulate net realized gain live",
+     "inputs": [
+       { "id": "sourceRate", "label": "Source Buy Rate", "type": "slider", "min": 1000, "max": 4000, "step": 50, "defaultValue": 1850, "unit": "₹" },
+       { "id": "targetRate", "label": "Target Sell Rate", "type": "slider", "min": 1500, "max": 5000, "step": 50, "defaultValue": 2480, "unit": "₹" },
+       { "id": "freightCost", "label": "Est. Freight / Qtl", "type": "slider", "min": 50, "max": 500, "step": 10, "defaultValue": 180, "unit": "₹" }
+     ],
+     "outputs": [
+       { "label": "Gross Arbitrage Spread", "formula": "targetRate - sourceRate", "format": "currency" },
+       { "label": "Net Realized Profit", "formula": "targetRate - sourceRate - freightCost", "format": "currency", "highlight": true }
+     ]
+   }
+   \`\`\`
+
+4. EXECUTIVE KPI HIGHLIGHT BADGES (USE \`\`\`cards):
+   Summarize top 3-4 key takeaways at a glance.
+   Example:
+   \`\`\`cards
+   {
+     "title": "Mandi Rate & Arbitrage Highlights",
+     "cards": [
+       { "label": "Top Realization Yard", "value": "₹2,480/qtl", "status": "positive", "subtext": "Indore APMC" },
+       { "label": "Max Net Gain", "value": "+₹450/qtl", "status": "positive", "subtext": "After freight deduction" },
+       { "label": "Market Trend", "value": "Bullish", "status": "neutral", "subtext": "Arrivals down 12%" }
+     ]
+   }
+   \`\`\`
+
+5. LOCAL COMPETITOR & OUTLET COORDINATES (USE \`\`\`map):
+   When scanning specific geographical locations or competitor clusters, emit a Leaflet map spec with coordinates.
+
+6. STRUCTURED COMPARISONS & INVENTORIES:
+   Use standard GitHub-Flavored Markdown tables (| Col 1 | Col 2 |).`;
 
     const rawFilteredHistory = history
       .filter((h: any) => h.role === "user" || h.role === "assistant")
@@ -202,6 +278,8 @@ CRITICAL SUB-AGENT INDEPENDENT RENDERING & HEAD AI EXECUTIVE SYNTHESIS:
             );
           } catch (e) {}
         };
+
+        emitToolDelta = (d) => sendEvent("tool_result_delta", d);
 
         sendEvent("conversation_init", {
           conversationId: activeConversationId,
@@ -294,14 +372,24 @@ CRITICAL SUB-AGENT INDEPENDENT RENDERING & HEAD AI EXECUTIVE SYNTHESIS:
                 summary,
                 status: "calling",
               });
-              // Note: artifact_start is intentionally sent on tool-input-start, not here,
-              // to prevent clearing real-time streamed arguments.
             } else if (part.type === "tool-result") {
               const callId = part.id || part.toolCallId;
               const toolName =
                 part.toolName ||
                 toolNameById.get(callId) ||
                 "unknown_tool";
+
+              // Real generator streaming: preliminary delta emitted by async generator tools
+              if (part.preliminary) {
+                const delta = part.output?.delta || part.result?.delta || "";
+                sendEvent("tool_result_delta", {
+                  toolCallId: callId,
+                  toolName,
+                  delta,
+                });
+                continue;
+              }
+
               const toolArgs = part.input ?? part.args ?? {};
               const toolResult = part.output ?? part.result ?? {};
               const def = (TOOL_DEFINITIONS as any)[toolName] || {

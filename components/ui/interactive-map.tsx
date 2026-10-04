@@ -7,8 +7,10 @@ import {
   Store,
   Layers,
   MapPin,
+  Code2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { SerpApiPayloadModal } from "@/components/ui/serpapi-payload-modal";
 
 export interface MapMarker {
   lat: number;
@@ -114,6 +116,7 @@ export function InteractiveMap({
   const [activeTile, setActiveTile] = useState<string>("google");
   const [currentZoom, setCurrentZoom] = useState<number>(13);
   const [hoveredPlaceName, setHoveredPlaceName] = useState<string | null>(null);
+  const [isPayloadModalOpen, setIsPayloadModalOpen] = useState<boolean>(false);
 
   const parsedSpec = React.useMemo(() => {
     if (spec && typeof spec === "object") return spec;
@@ -623,15 +626,25 @@ export function InteractiveMap({
         )}
       </div>
 
-      {/* ── Floating Top-Right: Re-Center Button ── */}
-      <div className="absolute top-3 right-3 z-10 flex items-center gap-2">
+      {/* ── Floating Top-Right: Re-Center & Inspect SerpApi Payload Buttons ── */}
+      <div className="absolute top-3 right-3 z-10 flex items-center gap-1.5">
+        <button
+          onClick={() => setIsPayloadModalOpen(true)}
+          title="Inspect SerpApi JSON Payload"
+          className="px-2 py-1.5 bg-black/80 dark:bg-card/90 backdrop-blur-md hover:bg-black/95 border border-emerald-500/40 rounded-xl text-emerald-400 font-bold text-[10px] shadow-sm transition-all flex items-center gap-1.5 cursor-pointer font-mono"
+        >
+          <Code2 className="size-3 text-emerald-400" />
+          <span className="hidden sm:inline">INSPECT</span>
+          <span>SERPAPI</span>
+        </button>
+
         <button
           onClick={handleRecenter}
           title="Re-center Catchment Area"
           className="px-2.5 py-1.5 bg-black/75 dark:bg-card/85 backdrop-blur-md hover:bg-black/90 border border-white/15 dark:border-border/80 rounded-xl text-white font-bold text-[10px] shadow-sm transition-all flex items-center gap-1.5 cursor-pointer font-mono"
         >
           <Crosshair className="size-3 text-emerald-400" />
-          <span>RE-CENTER</span>
+          <span className="hidden sm:inline">RE-CENTER</span>
         </button>
       </div>
 
@@ -717,6 +730,31 @@ export function InteractiveMap({
           box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5) !important;
         }
       `}</style>
+      {/* ── SerpApi JSON Inspection Modal ── */}
+      <SerpApiPayloadModal
+        isOpen={isPayloadModalOpen}
+        onClose={() => setIsPayloadModalOpen(false)}
+        data={{
+          engine: "google_maps",
+          query: parsedSpec.title || "Nearby Commercial Competitors",
+          location: (parsedSpec.markers && parsedSpec.markers[0]?.address) || "Local Catchment",
+          coordinates: parsedSpec.center
+            ? `@${parsedSpec.center[0].toFixed(5)},${parsedSpec.center[1].toFixed(5)},14z`
+            : undefined,
+          radiusKm: parsedSpec.radiusKm || radiusKm,
+          resultsCount: markersCount,
+          items: (parsedSpec.markers || []).map((m) => ({
+            title: m.title,
+            rating: m.rating,
+            reviews: m.reviews,
+            threatLevel: m.threatLevel,
+            distance: m.distance,
+            address: m.address || m.landmark,
+            gps_coordinates: { latitude: m.lat, longitude: m.lng },
+            type: m.type,
+          })),
+        }}
+      />
     </div>
   );
 }

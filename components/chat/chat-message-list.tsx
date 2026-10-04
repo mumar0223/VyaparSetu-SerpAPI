@@ -452,6 +452,7 @@ export function ChatMessageList({
                   <SwarmTabsCard
                     toolCalls={msg.toolCalls}
                     onOpenArtifact={onOpenArtifact}
+                    isStreaming={Boolean(msg.isStreaming)}
                   />
                 )}
 
@@ -595,11 +596,11 @@ function ImageLightboxModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/85 backdrop-blur-md animate-in fade-in duration-200"
+      className="fixed inset-0 isolate z-50 flex items-center justify-center p-4 sm:p-6 bg-black/60 dark:bg-black/75 duration-150 animate-in fade-in"
       onClick={onClose}
     >
       <div
-        className="relative max-w-4xl w-full max-h-[92vh] flex flex-col bg-zinc-950/95 border border-zinc-800 rounded-2xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200"
+        className="relative max-w-4xl w-full max-h-[92vh] flex flex-col bg-zinc-950/95 border border-zinc-800 rounded-2xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-150"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header Bar */}

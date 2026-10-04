@@ -814,9 +814,9 @@ export function ChatWorkspace({
       setChatLoadError(null);
 
       if (!id) {
+        // If an active stream is currently in progress, do not abort or wipe state!
         if (abortControllerRef.current) {
-          abortControllerRef.current.abort();
-          abortControllerRef.current = null;
+          return;
         }
         setIsLoading(false);
         currentLoadedChatIdRef.current = null;
@@ -997,6 +997,9 @@ export function ChatWorkspace({
   // ── Sync with Route / Pathname (handles Back, Forward, Link clicks, pushState) ──
   useEffect(() => {
     if (!pathname) return;
+
+    // CRITICAL: Never allow route sync to abort or wipe an active in-flight AI stream
+    if (abortControllerRef.current) return;
 
     if (
       pathname === "/" ||
@@ -1288,7 +1291,7 @@ function formatSmartChatTitle(rawText: string): string {
     if (isFirstMessage) {
       currentLoadedChatIdRef.current = currentConvId;
       setActiveChatId(currentConvId);
-      window.history.pushState(null, "", `/c/${currentConvId}`);
+      window.history.replaceState(null, "", `/c/${currentConvId}`);
       const initialTitle = formatSmartChatTitle(text);
       setConversations((prev) => [
         {
@@ -1534,6 +1537,60 @@ function formatSmartChatTitle(rawText: string): string {
               }
               scheduleFlush();
             }
+          } else if (eventType === "tool_result_delta" || eventType === "artifact_delta") {
+            const toolCallId = data.toolCallId;
+            const idx = streamedToolCalls.findIndex((t) =>
+              toolCallId
+                ? t.toolCallId === toolCallId
+                : data.toolName
+                ? t.toolName === data.toolName
+                : false,
+            );
+            const incomingContent = data.replace
+              ? (data.content ?? "")
+              : (data.delta || data.content || "");
+
+            if (idx >= 0) {
+              const existing = streamedToolCalls[idx];
+              const prevRes = (existing.result as any) || {};
+              const prevData = prevRes.data || {};
+              const prevContent = prevData.content || prevRes.content || "";
+              const newContent = data.replace
+                ? incomingContent
+                : prevContent + incomingContent;
+
+              streamedToolCalls[idx] = {
+                ...existing,
+                args: data.args || existing.args,
+                status: "calling",
+                result: {
+                  ...prevRes,
+                  isArtifact: true,
+                  content: newContent,
+                  data: {
+                    ...prevData,
+                    content: newContent,
+                  },
+                },
+              };
+            } else {
+              streamedToolCalls.push({
+                toolName: data.toolName || "subagent",
+                toolCallId,
+                icon: data.icon || "bot",
+                args: data.args,
+                status: "calling",
+                summary: `Generating ${data.toolName || "intelligence"}...`,
+                result: {
+                  isArtifact: true,
+                  content: incomingContent,
+                  data: {
+                    content: incomingContent,
+                  },
+                },
+              });
+            }
+            scheduleFlush();
           } else if (eventType === "artifact_start") {
             const toolCallId = data.toolCallId || "stageDocument";
             const currentTitle = data.title || "Market Intelligence Report";
@@ -1569,12 +1626,18 @@ function formatSmartChatTitle(rawText: string): string {
             }
             scheduleFlush();
           } else if (eventType === "tool_call") {
-            const idx = streamedToolCalls.findIndex((t) => t.toolCallId === data.toolCallId);
+            const idx = streamedToolCalls.findIndex((t) =>
+              data.toolCallId
+                ? t.toolCallId === data.toolCallId
+                : data.toolName
+                ? t.toolName === data.toolName
+                : false,
+            );
             if (idx >= 0) {
               streamedToolCalls[idx] = {
                 ...streamedToolCalls[idx],
-                args: data.args,
-                summary: data.summary,
+                args: data.args || streamedToolCalls[idx].args,
+                summary: data.summary || streamedToolCalls[idx].summary,
                 status: "calling",
               };
             } else {
@@ -1604,10 +1667,11 @@ function formatSmartChatTitle(rawText: string): string {
             const targetId = data.result?.targetArtifactId || data.result?.artifactId;
 
             streamedToolCalls = streamedToolCalls.map((t) => {
-              const matchesCall =
-                t.toolCallId && data.toolCallId
-                  ? t.toolCallId === data.toolCallId
-                  : t.toolName === data.toolName;
+              const matchesCall = data.toolCallId
+                ? t.toolCallId === data.toolCallId
+                : data.toolName
+                ? t.toolName === data.toolName
+                : false;
 
               if (matchesCall) {
                 return {
@@ -1616,6 +1680,7 @@ function formatSmartChatTitle(rawText: string): string {
                   result: data.result,
                   summary: data.summary || t.summary,
                   status: "completed",
+                  completedAt: t.completedAt || Date.now(),
                 };
               }
 
@@ -2037,6 +2102,16 @@ function formatSmartChatTitle(rawText: string): string {
               <h1 className="text-3xl md:text-4xl font-serif font-bold tracking-tight text-forest dark:text-foreground mb-2">
                 {t("chat.agendaTitle", "What's on the agenda today?")}
               </h1>
+
+              {/* Natural typographic subtitle (No artificial badge, no pulse circle) */}
+              <p className="text-xs sm:text-sm font-medium text-forest/80 dark:text-zinc-300 mb-1.5 leading-relaxed">
+                <span>Autonomous Enterprise Intelligence Swarm</span>
+                <span className="mx-2 text-forest/30 dark:text-zinc-600 font-normal">•</span>
+                <span className="text-forest dark:text-mint font-semibold">
+                  Powered by SerpApi Real-Time Grounding
+                </span>
+              </p>
+
               <p className="text-xs sm:text-sm text-ink-muted dark:text-muted-foreground">
                 {t(
                   "chat.agendaSubtitle",

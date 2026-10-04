@@ -15,11 +15,18 @@ import {
   TrendingUp,
   PieChart as PieIcon,
   LineChart as LineIcon,
+  Maximize2,
+  ZoomIn,
+  ZoomOut,
+  RotateCcw,
+  Download,
+  X,
 } from "lucide-react";
 import {
   ResponsiveContainer,
   BarChart,
   Bar,
+  Cell,
   LineChart,
   Line,
   AreaChart,
@@ -121,17 +128,23 @@ function detectBlockClassification(language: string, rawCode: string): BlockClas
   const lang = (language || "").toLowerCase().trim();
   const code = rawCode.trim();
 
-  // 1. Explicit Mermaid diagram
+  // 1. Explicit Mermaid diagram (intercept Mermaid xychart to render with interactive Recharts)
   if (lang === "mermaid") {
+    if (/xychart(?:-beta)?/i.test(code)) {
+      return { type: "chart", label: "Interactive Chart" };
+    }
     return { type: "mermaid", label: "Workflow Diagram" };
   }
 
-  // 2. Interactive Charts (```chart, ```chart-json, ```json-chart, ```recharts)
+  // 2. Interactive Charts (```chart, ```chart-json, ```json-chart, ```recharts, ```xychart)
   if (
     lang === "chart" ||
     lang === "chart-json" ||
     lang === "json-chart" ||
     lang === "recharts" ||
+    lang === "xychart" ||
+    lang === "xychart-beta" ||
+    /xychart(?:-beta)?/i.test(code) ||
     (code.startsWith("{") &&
       /"(?:type|chartType)"\s*:\s*"(?:bar|line|area|pie)"/i.test(code) &&
       /"data"\s*:/i.test(code))
@@ -305,12 +318,14 @@ function MermaidDiagram({ chart }: { chart: string }) {
   );
   const [error, setError] = useState<string | null>(null);
   const [showCode, setShowCode] = useState(false);
+  const [isLightboxOpen, setIsLightboxOpen] = useState(false);
   const uid = useId().replace(/:/g, "_");
 
   useEffect(() => {
     const cached = mermaidCache.get(cacheKey);
     if (cached) {
-      setSvgHtml(cached);
+      const cleaned = cached.replace(/max-width:\s*[\d.]+px;?/gi, "");
+      setSvgHtml(cleaned);
       setError(null);
       return;
     }
@@ -347,9 +362,11 @@ function MermaidDiagram({ chart }: { chart: string }) {
 
         const renderId = `m_${uid}_${Date.now()}`;
         const { svg } = await mermaid.render(renderId, rawChart);
-        mermaidCache.set(cacheKey, svg);
+        // Strip out Mermaid's restrictive inline max-width so the diagram can fill 100% width
+        const cleanedSvg = svg.replace(/max-width:\s*[\d.]+px;?/gi, "");
+        mermaidCache.set(cacheKey, cleanedSvg);
         if (isMounted) {
-          setSvgHtml(svg);
+          setSvgHtml(cleanedSvg);
           setError(null);
         }
       } catch (err: any) {
@@ -368,52 +385,213 @@ function MermaidDiagram({ chart }: { chart: string }) {
   }, [rawChart, cacheKey, isDark, isStreaming, uid]);
 
   return (
-    <div className="relative my-4 rounded-xl border border-sage/30 dark:border-border bg-white dark:bg-zinc-900 overflow-hidden not-prose shadow-2xs">
-      <div className="flex items-center justify-between px-3.5 py-2 bg-cream dark:bg-zinc-950 border-b border-sage/20 dark:border-border text-xs text-muted-foreground">
-        <div className="flex items-center gap-1.5 font-medium text-forest dark:text-mint">
-          <Workflow className="size-3.5" />
-          <span>Workflow Diagram</span>
+    <>
+      <div className="relative my-4 rounded-xl border border-sage/30 dark:border-border bg-white dark:bg-zinc-900 overflow-hidden not-prose shadow-2xs">
+        <div className="flex items-center justify-between px-3.5 py-2 bg-cream dark:bg-zinc-950 border-b border-sage/20 dark:border-border text-xs text-muted-foreground">
+          <div className="flex items-center gap-1.5 font-medium text-forest dark:text-mint">
+            <Workflow className="size-3.5" />
+            <span>Workflow Diagram</span>
+          </div>
+          <div className="flex items-center gap-2">
+            {svgHtml && (
+              <button
+                type="button"
+                onClick={() => setIsLightboxOpen(true)}
+                className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                title="Expand diagram in full view"
+              >
+                <Maximize2 className="size-3" />
+                <span>Full View</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setShowCode(!showCode)}
+              className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+              title="Toggle source code"
+            >
+              <CodeIcon className="size-3" />
+              <span>{showCode ? "Hide Code" : "Source"}</span>
+            </button>
+            <CodeCopyButton code={rawChart} />
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setShowCode(!showCode)}
-            className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-            title="Toggle source code"
-          >
-            <CodeIcon className="size-3" />
-            <span>{showCode ? "Hide Code" : "Source"}</span>
-          </button>
-          <CodeCopyButton code={rawChart} />
+
+        {showCode && (
+          <pre className="p-3 bg-muted/40 border-b border-sage/20 dark:border-border overflow-x-auto text-[12px] font-mono text-foreground">
+            <code>{rawChart}</code>
+          </pre>
+        )}
+
+        <div className="p-4 overflow-x-auto flex justify-center items-center min-h-[100px] bg-white/50 dark:bg-zinc-900/50">
+          {error && !isStreaming ? (
+            <div className="text-xs text-muted-foreground py-2 text-center w-full">
+              <p className="text-amber-600 dark:text-amber-400 font-medium mb-1">
+                Diagram preview unavailable (Syntax Error)
+              </p>
+              <pre className="text-[11.5px] font-mono bg-amber-500/10 p-2.5 rounded-lg border border-amber-500/20 text-left overflow-x-auto">
+                <code>{rawChart}</code>
+              </pre>
+            </div>
+          ) : svgHtml ? (
+            <div
+              onClick={() => setIsLightboxOpen(true)}
+              title="Click to expand diagram in full view"
+              className="w-full flex justify-center cursor-zoom-in group relative transition-opacity hover:opacity-95"
+            >
+              <div
+                className="w-full flex justify-center items-center [&_svg]:!w-full [&_svg]:!max-w-full [&_svg]:h-auto [&_svg]:max-h-[500px]"
+                dangerouslySetInnerHTML={{ __html: svgHtml }}
+              />
+              <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity bg-black/60 dark:bg-black/75 text-white text-[10.5px] px-2 py-0.5 rounded-md flex items-center gap-1 pointer-events-none shadow-xs">
+                <Maximize2 className="size-3" />
+                <span>Full View</span>
+              </div>
+            </div>
+          ) : (
+            <div className="w-full py-4">
+              <Skeleton className="h-[120px] w-full rounded-xl" />
+            </div>
+          )}
         </div>
       </div>
 
-      {showCode && (
-        <pre className="p-3 bg-muted/40 border-b border-sage/20 dark:border-border overflow-x-auto text-[12px] font-mono text-foreground">
-          <code>{rawChart}</code>
-        </pre>
+      {isLightboxOpen && svgHtml && (
+        <MermaidLightboxModal
+          svgHtml={svgHtml}
+          rawChart={rawChart}
+          onClose={() => setIsLightboxOpen(false)}
+        />
       )}
+    </>
+  );
+}
 
-      <div className="p-4 overflow-x-auto flex justify-center items-center min-h-[100px] bg-white/50 dark:bg-zinc-900/50">
-        {error && !isStreaming ? (
-          <div className="text-xs text-muted-foreground py-2 text-center w-full">
-            <p className="text-amber-600 dark:text-amber-400 font-medium mb-1">
-              Diagram preview unavailable (Syntax Error)
-            </p>
-            <pre className="text-[11.5px] font-mono bg-amber-500/10 p-2.5 rounded-lg border border-amber-500/20 text-left overflow-x-auto">
-              <code>{rawChart}</code>
-            </pre>
+function MermaidLightboxModal({
+  svgHtml,
+  rawChart,
+  onClose,
+}: {
+  svgHtml: string;
+  rawChart: string;
+  onClose: () => void;
+}) {
+  const [zoom, setZoom] = useState(1);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  const handleZoomIn = () => setZoom((z) => Math.min(z + 0.25, 3));
+  const handleZoomOut = () => setZoom((z) => Math.max(z - 0.25, 0.5));
+  const handleResetZoom = () => setZoom(1);
+
+  const handleDownloadSvg = () => {
+    try {
+      const blob = new Blob([svgHtml], { type: "image/svg+xml;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `workflow-diagram-${Date.now()}.svg`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error("SVG download failed", e);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 isolate z-50 flex items-center justify-center p-3 sm:p-6 bg-black/60 dark:bg-black/75 duration-150 animate-in fade-in"
+      onClick={onClose}
+    >
+      <div
+        className="relative max-w-6xl w-full max-h-[92vh] h-[88vh] flex flex-col bg-white dark:bg-zinc-950 border border-sage/30 dark:border-zinc-800 rounded-2xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-150"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header Bar */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-sage/20 dark:border-zinc-800 bg-cream/80 dark:bg-zinc-900/80">
+          <div className="flex items-center gap-2">
+            <Workflow className="size-4 text-forest dark:text-mint" />
+            <span className="text-sm font-semibold text-foreground">
+              Workflow Diagram Full View
+            </span>
           </div>
-        ) : svgHtml ? (
+
+          <div className="flex items-center gap-2">
+            {/* Zoom Controls */}
+            <div className="flex items-center bg-secondary/60 dark:bg-zinc-800 rounded-lg p-0.5 border border-border">
+              <button
+                type="button"
+                onClick={handleZoomOut}
+                disabled={zoom <= 0.5}
+                title="Zoom Out"
+                className="size-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-background transition-colors disabled:opacity-40 cursor-pointer"
+              >
+                <ZoomOut className="size-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={handleResetZoom}
+                title="Reset Zoom"
+                className="px-2 text-[11px] font-mono text-muted-foreground hover:text-foreground cursor-pointer"
+              >
+                {Math.round(zoom * 100)}%
+              </button>
+              <button
+                type="button"
+                onClick={handleZoomIn}
+                disabled={zoom >= 3}
+                title="Zoom In"
+                className="size-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-background transition-colors disabled:opacity-40 cursor-pointer"
+              >
+                <ZoomIn className="size-3.5" />
+              </button>
+            </div>
+
+            {/* Download SVG */}
+            <button
+              type="button"
+              onClick={handleDownloadSvg}
+              title="Download vector SVG"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-foreground bg-secondary/80 hover:bg-secondary transition-colors cursor-pointer"
+            >
+              <Download className="size-3.5 text-forest dark:text-mint" />
+              <span className="hidden sm:inline">Download SVG</span>
+            </button>
+
+            {/* Close Button */}
+            <button
+              type="button"
+              onClick={onClose}
+              title="Close (Esc)"
+              className="size-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer"
+            >
+              <X className="size-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Full-View Viewport with Zoom and Scroll */}
+        <div className="flex-1 overflow-auto p-4 sm:p-8 flex items-center justify-center bg-cream/30 dark:bg-black/40 scrollbar-thin">
           <div
-            className="w-full flex justify-center [&_svg]:max-w-full [&_svg]:h-auto"
+            style={{
+              width: `${zoom * 100}%`,
+              maxWidth: zoom === 1 ? "100%" : "none",
+            }}
+            className={cn(
+              "w-full flex justify-center items-center [&_svg]:!w-full [&_svg]:!max-w-full [&_svg]:h-auto transition-all duration-150 ease-out",
+              zoom === 1 ? "[&_svg]:max-h-[72vh]" : "[&_svg]:max-h-none"
+            )}
             dangerouslySetInnerHTML={{ __html: svgHtml }}
           />
-        ) : (
-          <div className="w-full py-4">
-            <Skeleton className="h-[120px] w-full rounded-xl" />
-          </div>
-        )}
+        </div>
       </div>
     </div>
   );
@@ -431,6 +609,20 @@ const PALETTE = [
   "#E76F51",
   "#3B82F6",
   "#8B5CF6",
+];
+
+// Matplotlib Tab10 / Category10 categorical color cycle for auto-varying comparison bars
+const MATPLOTLIB_TAB10 = [
+  "#2563eb", // Blue (tab:blue)
+  "#10b981", // Emerald (tab:green)
+  "#f59e0b", // Amber (tab:orange)
+  "#8b5cf6", // Purple (tab:purple)
+  "#06b6d4", // Cyan (tab:cyan)
+  "#f97316", // Coral/Orange (tab:red)
+  "#ec4899", // Rose (tab:pink)
+  "#14b8a6", // Teal (tab:teal)
+  "#6366f1", // Indigo
+  "#84cc16", // Lime (tab:olive)
 ];
 
 function sanitizeColor(val: any, fallback: string): string {
@@ -484,9 +676,74 @@ function ChartSkeleton() {
   );
 }
 
+function parseMermaidXyChart(code: string): any {
+  if (!code || !/xychart(?:-beta)?/i.test(code)) return null;
+
+  // Title: title "..." or title '...' or title ...
+  const titleMatch = code.match(/title\s+["']?([^"'\n\r]+)["']?/i);
+  const title = titleMatch ? titleMatch[1].trim() : "Price & Rate Comparison";
+
+  // x-axis ["A", "B", ...] or x-axis [A, B, ...]
+  const xAxisMatch = code.match(/x-axis\s*\[([^\]]+)\]/i);
+  let categories: string[] = [];
+  if (xAxisMatch) {
+    categories = xAxisMatch[1]
+      .split(",")
+      .map((s) => s.replace(/["']/g, "").trim())
+      .filter(Boolean);
+  }
+
+  // y-axis "..." min --> max
+  const yAxisMatch = code.match(/y-axis\s+["']?([^"'\n\r]+)["']?/i);
+  const yLabel = yAxisMatch ? yAxisMatch[1].trim() : "";
+  const unit = /₹|rs|inr/i.test(yLabel) || /₹/i.test(title) ? "₹" : /%/i.test(yLabel) ? "%" : "";
+
+  // bar [...] or line [...]
+  const barMatch = code.match(/bar\s*\[([^\]]+)\]/i);
+  const lineMatch = code.match(/line\s*\[([^\]]+)\]/i);
+  const valMatch = barMatch || lineMatch;
+  const isLine = Boolean(lineMatch && !barMatch);
+
+  let values: number[] = [];
+  if (valMatch) {
+    values = valMatch[1]
+      .split(",")
+      .map((v) => Number(v.replace(/[^0-9.-]/g, "").trim()))
+      .filter((v) => !isNaN(v));
+  }
+
+  if (categories.length > 0 && values.length > 0) {
+    const data = categories.map((name, idx) => ({
+      name,
+      value: values[idx] ?? 0,
+    }));
+
+    return {
+      chartType: isLine ? "line" : "bar",
+      title,
+      unit,
+      data,
+      xKey: "name",
+      series: [
+        {
+          key: "value",
+          name: yLabel || "Modal Price",
+          color: "#10b981",
+        },
+      ],
+    };
+  }
+
+  return null;
+}
+
 function parseFlexibleChartJson(raw: string): any {
   if (!raw) return null;
   const trimmed = raw.trim();
+
+  // 0. Automatically convert Mermaid xychart syntax to interactive chart spec
+  const fromMermaid = parseMermaidXyChart(trimmed);
+  if (fromMermaid) return fromMermaid;
 
   try {
     return JSON.parse(trimmed);
@@ -494,9 +751,12 @@ function parseFlexibleChartJson(raw: string): any {
 
   // 1. Strip markdown fences if present
   let cleaned = trimmed
-    .replace(/^```(?:chart|json|recharts)?\s*/i, "")
+    .replace(/^```(?:chart|json|recharts|mermaid)?\s*/i, "")
     .replace(/\s*```$/, "")
     .trim();
+
+  const fromMermaidCleaned = parseMermaidXyChart(cleaned);
+  if (fromMermaidCleaned) return fromMermaidCleaned;
 
   // 2. Remove single-line comments // and multi-line comments /* */
   cleaned = cleaned
@@ -756,207 +1016,232 @@ function ChartView({
         </span>
       </div>
 
-      {/* Responsive Recharts Canvas */}
-      <div className="p-4 pt-5 w-full h-[260px] sm:h-[280px]">
-        <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 500, height: 260 }}>
-          {chartType === "pie" ? (
-            <PieChart>
-              <RechartsTooltip
-                contentStyle={{
-                  backgroundColor: "rgba(24, 24, 27, 0.95)",
-                  borderColor: "rgba(63, 63, 70, 0.5)",
-                  borderRadius: "10px",
-                  fontSize: "12px",
-                  color: "#fff",
-                }}
-                formatter={(val: any) => [
-                  `${unit ? unit + " " : ""}${val}`,
-                  "Value",
-                ]}
-              />
-              <Pie
-                isAnimationActive={false}
-                data={data.map((d: any, idx: number) => ({
-                  ...d,
-                  fill: sanitizeColor(d.fill || d.color, PALETTE[idx % PALETTE.length]),
-                }))}
-                dataKey={yKey}
-                nameKey={xKey}
-                cx="50%"
-                cy="50%"
-                outerRadius={85}
-                innerRadius={45}
-                paddingAngle={3}
-              />
-              <Legend
-                height={36}
-                formatter={(val: any) => (
-                  <span className="text-[11px] text-muted-foreground">
-                    {val}
-                  </span>
-                )}
-              />
-            </PieChart>
-          ) : chartType === "line" ? (
-            <LineChart
-              data={data}
-              margin={{ top: 10, right: 15, left: -10, bottom: 0 }}
-            >
-              <CartesianGrid
-                strokeDasharray="3 3"
-                stroke="#e5e7eb"
-                className="dark:stroke-zinc-800"
-                opacity={0.6}
-              />
-              <XAxis
-                dataKey={xKey}
-                stroke="#888888"
-                fontSize={11}
-                tickLine={false}
-              />
-              <YAxis
-                stroke="#888888"
-                fontSize={11}
-                tickLine={false}
-                tickFormatter={(v) => `${unit ? unit : ""}${v}`}
-              />
-              <RechartsTooltip
-                contentStyle={{
-                  backgroundColor: "rgba(24, 24, 27, 0.95)",
-                  borderColor: "rgba(63, 63, 70, 0.5)",
-                  borderRadius: "10px",
-                  fontSize: "12px",
-                  color: "#fff",
-                }}
-                formatter={(val: any) => [
-                  `${unit ? unit + " " : ""}${val}`,
-                  "",
-                ]}
-              />
-              {seriesList.map((s: any, idx: number) => {
-                const lineColor = sanitizeColor(s.color, PALETTE[idx % PALETTE.length]);
-                return (
-                  <Line
-                    isAnimationActive={false}
-                    key={s.key || `line-series-${idx}`}
-                    type="monotone"
-                    dataKey={s.key}
-                    name={s.name}
-                    stroke={lineColor}
-                    strokeWidth={2.5}
-                    dot={{ r: 3.5, fill: lineColor }}
-                    activeDot={{ r: 5 }}
-                  />
-                );
-              })}
-            </LineChart>
-          ) : chartType === "area" ? (
-            <AreaChart
-              data={data}
-              margin={{ top: 10, right: 15, left: -10, bottom: 0 }}
-            >
-              <defs>
-                <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#2D6A4F" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#2D6A4F" stopOpacity={0.0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid
-                strokeDasharray="3 3"
-                stroke="#e5e7eb"
-                className="dark:stroke-zinc-800"
-                opacity={0.6}
-              />
-              <XAxis
-                dataKey={xKey}
-                stroke="#888888"
-                fontSize={11}
-                tickLine={false}
-              />
-              <YAxis
-                stroke="#888888"
-                fontSize={11}
-                tickLine={false}
-                tickFormatter={(v) => `${unit ? unit : ""}${v}`}
-              />
-              <RechartsTooltip
-                contentStyle={{
-                  backgroundColor: "rgba(24, 24, 27, 0.95)",
-                  borderColor: "rgba(63, 63, 70, 0.5)",
-                  borderRadius: "10px",
-                  fontSize: "12px",
-                  color: "#fff",
-                }}
-              />
-              {seriesList.map((s: any, idx: number) => {
-                const areaColor = sanitizeColor(s.color, PALETTE[idx % PALETTE.length]);
-                return (
-                  <Area
-                    isAnimationActive={false}
-                    key={s.key || `area-series-${idx}`}
-                    type="monotone"
-                    dataKey={s.key}
-                    name={s.name}
-                    stroke={areaColor}
-                    strokeWidth={2}
-                    fillOpacity={0.25}
-                    fill={areaColor}
-                  />
-                );
-              })}
-            </AreaChart>
-          ) : (
-            <BarChart
-              data={data}
-              margin={{ top: 10, right: 15, left: -10, bottom: 0 }}
-            >
-              <CartesianGrid
-                strokeDasharray="3 3"
-                stroke="#e5e7eb"
-                className="dark:stroke-zinc-800"
-                opacity={0.6}
-              />
-              <XAxis
-                dataKey={xKey}
-                stroke="#888888"
-                fontSize={11}
-                tickLine={false}
-              />
-              <YAxis
-                stroke="#888888"
-                fontSize={11}
-                tickLine={false}
-                tickFormatter={(v) => `${unit ? unit : ""}${v}`}
-              />
-              <RechartsTooltip
-                contentStyle={{
-                  backgroundColor: "rgba(24, 24, 27, 0.95)",
-                  borderColor: "rgba(63, 63, 70, 0.5)",
-                  borderRadius: "10px",
-                  fontSize: "12px",
-                  color: "#fff",
-                }}
-                formatter={(val: any) => [
-                  `${unit ? unit + " " : ""}${val}`,
-                  "",
-                ]}
-              />
-              {seriesList.map((s: any, idx: number) => {
-                const barColor = sanitizeColor(s.color, PALETTE[idx % PALETTE.length]);
-                return (
-                  <Bar
-                    isAnimationActive={false}
-                    key={s.key || `bar-series-${idx}`}
-                    dataKey={s.key}
-                    name={s.name}
-                    fill={barColor}
-                    radius={[4, 4, 0, 0]}
-                  />
-                );
-              })}
-            </BarChart>
-          )}
-        </ResponsiveContainer>
+      {/* Responsive Recharts Canvas with horizontal scroll support */}
+      <div className="p-4 pt-5 w-full h-[280px] sm:h-[300px] overflow-x-auto scrollbar-thin">
+        <div className={cn("w-full h-full", data.length > 5 && "min-w-[480px]")}>
+          <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 500, height: 280 }}>
+            {chartType === "pie" ? (
+              <PieChart>
+                <RechartsTooltip
+                  contentStyle={{
+                    backgroundColor: "rgba(24, 24, 27, 0.95)",
+                    borderColor: "rgba(63, 63, 70, 0.5)",
+                    borderRadius: "10px",
+                    fontSize: "12px",
+                    color: "#fff",
+                  }}
+                  formatter={(val: any) => [
+                    `${unit ? unit + " " : ""}${val}`,
+                    "Value",
+                  ]}
+                />
+                <Pie
+                  isAnimationActive={false}
+                  data={data.map((d: any, idx: number) => ({
+                    ...d,
+                    fill: sanitizeColor(d.fill || d.color, PALETTE[idx % PALETTE.length]),
+                  }))}
+                  dataKey={yKey}
+                  nameKey={xKey}
+                  cx="50%"
+                  cy="50%"
+                  outerRadius={85}
+                  innerRadius={45}
+                  paddingAngle={3}
+                />
+                <Legend
+                  height={36}
+                  formatter={(val: any) => (
+                    <span className="text-[11px] text-muted-foreground">
+                      {val}
+                    </span>
+                  )}
+                />
+              </PieChart>
+            ) : chartType === "line" ? (
+              <LineChart
+                data={data}
+                margin={{ top: 10, right: 15, left: -10, bottom: data.length > 3 ? 35 : 10 }}
+              >
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="#e5e7eb"
+                  className="dark:stroke-zinc-800"
+                  opacity={0.6}
+                />
+                <XAxis
+                  dataKey={xKey}
+                  stroke="#888888"
+                  fontSize={11}
+                  tickLine={false}
+                  interval={0}
+                  angle={data.length > 3 ? -20 : 0}
+                  textAnchor="middle"
+                  dy={data.length > 3 ? 12 : 5}
+                  height={data.length > 3 ? 55 : 30}
+                />
+                <YAxis
+                  stroke="#888888"
+                  fontSize={11}
+                  tickLine={false}
+                  tickFormatter={(v) => `${unit ? unit : ""}${v}`}
+                />
+                <RechartsTooltip
+                  contentStyle={{
+                    backgroundColor: "rgba(24, 24, 27, 0.95)",
+                    borderColor: "rgba(63, 63, 70, 0.5)",
+                    borderRadius: "10px",
+                    fontSize: "12px",
+                    color: "#fff",
+                  }}
+                  formatter={(val: any) => [
+                    `${unit ? unit + " " : ""}${val}`,
+                    "",
+                  ]}
+                />
+                {seriesList.map((s: any, idx: number) => {
+                  const lineColor = sanitizeColor(s.color, PALETTE[idx % PALETTE.length]);
+                  return (
+                    <Line
+                      isAnimationActive={false}
+                      key={s.key || `line-series-${idx}`}
+                      type="monotone"
+                      dataKey={s.key}
+                      name={s.name}
+                      stroke={lineColor}
+                      strokeWidth={2.5}
+                      dot={{ r: 3.5, fill: lineColor }}
+                      activeDot={{ r: 5 }}
+                    />
+                  );
+                })}
+              </LineChart>
+            ) : chartType === "area" ? (
+              <AreaChart
+                data={data}
+                margin={{ top: 10, right: 15, left: -10, bottom: data.length > 3 ? 35 : 10 }}
+              >
+                <defs>
+                  <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#2D6A4F" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#2D6A4F" stopOpacity={0.0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="#e5e7eb"
+                  className="dark:stroke-zinc-800"
+                  opacity={0.6}
+                />
+                <XAxis
+                  dataKey={xKey}
+                  stroke="#888888"
+                  fontSize={11}
+                  tickLine={false}
+                  interval={0}
+                  angle={data.length > 3 ? -20 : 0}
+                  textAnchor="middle"
+                  dy={data.length > 3 ? 12 : 5}
+                  height={data.length > 3 ? 55 : 30}
+                />
+                <YAxis
+                  stroke="#888888"
+                  fontSize={11}
+                  tickLine={false}
+                  tickFormatter={(v) => `${unit ? unit : ""}${v}`}
+                />
+                <RechartsTooltip
+                  contentStyle={{
+                    backgroundColor: "rgba(24, 24, 27, 0.95)",
+                    borderColor: "rgba(63, 63, 70, 0.5)",
+                    borderRadius: "10px",
+                    fontSize: "12px",
+                    color: "#fff",
+                  }}
+                />
+                {seriesList.map((s: any, idx: number) => {
+                  const areaColor = sanitizeColor(s.color, PALETTE[idx % PALETTE.length]);
+                  return (
+                    <Area
+                      isAnimationActive={false}
+                      key={s.key || `area-series-${idx}`}
+                      type="monotone"
+                      dataKey={s.key}
+                      name={s.name}
+                      stroke={areaColor}
+                      strokeWidth={2}
+                      fillOpacity={0.25}
+                      fill={areaColor}
+                    />
+                  );
+                })}
+              </AreaChart>
+            ) : (
+              <BarChart
+                data={data}
+                margin={{ top: 10, right: 15, left: -10, bottom: data.length > 3 ? 35 : 10 }}
+              >
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="#e5e7eb"
+                  className="dark:stroke-zinc-800"
+                  opacity={0.6}
+                />
+                <XAxis
+                  dataKey={xKey}
+                  stroke="#888888"
+                  fontSize={11}
+                  tickLine={false}
+                  interval={0}
+                  angle={data.length > 3 ? -20 : 0}
+                  textAnchor="middle"
+                  dy={data.length > 3 ? 12 : 5}
+                  height={data.length > 3 ? 55 : 30}
+                />
+                <YAxis
+                  stroke="#888888"
+                  fontSize={11}
+                  tickLine={false}
+                  tickFormatter={(v) => `${unit ? unit : ""}${v}`}
+                />
+                <RechartsTooltip
+                  contentStyle={{
+                    backgroundColor: "rgba(24, 24, 27, 0.95)",
+                    borderColor: "rgba(63, 63, 70, 0.5)",
+                    borderRadius: "10px",
+                    fontSize: "12px",
+                    color: "#fff",
+                  }}
+                  formatter={(val: any) => [
+                    `${unit ? unit + " " : ""}${val}`,
+                    "",
+                  ]}
+                />
+                {seriesList.map((s: any, idx: number) => {
+                  const barColor = sanitizeColor(s.color, PALETTE[idx % PALETTE.length]);
+                  return (
+                    <Bar
+                      isAnimationActive={false}
+                      key={s.key || `bar-series-${idx}`}
+                      dataKey={s.key}
+                      name={s.name}
+                      fill={barColor}
+                      radius={[4, 4, 0, 0]}
+                    >
+                      {seriesList.length === 1 &&
+                        data.map((_entry: any, cellIdx: number) => (
+                          <Cell
+                            key={`cell-${cellIdx}`}
+                            fill={MATPLOTLIB_TAB10[cellIdx % MATPLOTLIB_TAB10.length]}
+                          />
+                        ))}
+                    </Bar>
+                  );
+                })}
+              </BarChart>
+            )}
+          </ResponsiveContainer>
+        </div>
       </div>
 
       {/* Summary Note */}

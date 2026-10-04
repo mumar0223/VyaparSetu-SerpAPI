@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   Target,
   Landmark,
@@ -27,12 +27,14 @@ import {
   Cpu,
   Wrench,
   Maximize2,
+  Code2,
 } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import type { ToolCallItem } from "./types";
 import { MarkdownMessage } from "./markdown-message";
 import type { ArtifactPayload } from "./artifact-modal";
+import { SerpApiPayloadModal, type SerpApiPayloadData } from "@/components/ui/serpapi-payload-modal";
 
 function resolveDynamicIcon(iconName?: string) {
   switch (iconName?.toLowerCase()) {
@@ -64,6 +66,7 @@ function resolveDynamicIcon(iconName?: string) {
 interface SwarmTabsCardProps {
   toolCalls?: ToolCallItem[];
   onOpenArtifact?: (artifact: ArtifactPayload) => void;
+  isStreaming?: boolean;
 }
 
 interface AwakenedDomain {
@@ -71,18 +74,73 @@ interface AwakenedDomain {
   type: "swot" | "schemes" | "mandi" | "competitors" | "credit" | "ondc" | "district" | "custom";
   title: string;
   icon: any;
+  status: "calling" | "completed";
   summary?: string;
   spokenSummary?: string;
   result: any;
+  toolCall?: ToolCallItem;
 }
 
-export function SwarmTabsCard({ toolCalls = [], onOpenArtifact }: SwarmTabsCardProps) {
+export function SwarmTabsCard({ toolCalls = [], onOpenArtifact, isStreaming = false }: SwarmTabsCardProps) {
+  // Only display tabs when the agent has ACTUALLY started streaming content out or has completed
+  const completedCalls = toolCalls
+    .filter((tc) => {
+      const res = (tc.result || {}) as any;
+      const content = res?.content || res?.data?.content || res?.markdown || "";
+      if (tc.status === "completed") {
+        return Boolean(tc.result);
+      }
+      return typeof content === "string" && content.trim().length > 0;
+    });
+
+  if (completedCalls.length === 0) return null;
+
+  return (
+    <SwarmTabsCardInner
+      completedCalls={completedCalls}
+      toolCalls={toolCalls}
+      onOpenArtifact={onOpenArtifact}
+      isStreaming={isStreaming}
+    />
+  );
+}
+
+function SwarmTabsCardInner({
+  completedCalls,
+  toolCalls,
+  onOpenArtifact,
+  isStreaming,
+}: {
+  completedCalls: ToolCallItem[];
+  toolCalls: ToolCallItem[];
+  onOpenArtifact?: (artifact: ArtifactPayload) => void;
+  isStreaming: boolean;
+}) {
   const awakenedDomains: AwakenedDomain[] = [];
 
-  toolCalls.forEach((tc, idx) => {
-    if (!tc.result) return;
-    const res = tc.result as any;
+  completedCalls.forEach((tc, idx) => {
+    const isSubagent =
+      [
+        "runSWOTScan",
+        "evaluateGovtSchemes",
+        "getMandiArbitrage",
+        "getMandiRates",
+        "scanCatchmentRadar",
+        "searchCompetitors",
+        "evaluateCreditAndEMI",
+        "getOndcIntelligence",
+        "predictDistrictBusinesses",
+        "runCustomResearchAgent",
+      ].includes(tc.toolName) ||
+      tc.toolName?.startsWith("runCustom") ||
+      Boolean((tc.result as any)?.isCustomSubAgent) ||
+      Boolean((tc.result as any)?.isArtifact && (tc.result as any)?.tabTitle);
+
+    if (!isSubagent) return;
+
+    const res = (tc.result || {}) as any;
     const args = (tc.args || {}) as any;
+    const status: "calling" | "completed" = tc.status === "calling" ? "calling" : "completed";
 
     if (tc.toolName === "runSWOTScan") {
       const cat = args.category || res.businessCategory || "";
@@ -91,9 +149,11 @@ export function SwarmTabsCard({ toolCalls = [], onOpenArtifact }: SwarmTabsCardP
         type: "swot",
         title: cat ? `🎯 SWOT: ${cat.slice(0, 16)}` : "🎯 SWOT Analysis",
         icon: Target,
+        status,
         summary: res.summary,
         spokenSummary: res.spokenSummary,
         result: res.swot || res.data || res,
+        toolCall: tc,
       });
     } else if (tc.toolName === "evaluateGovtSchemes") {
       const sec = args.businessSector || res.businessSector || "";
@@ -102,11 +162,13 @@ export function SwarmTabsCard({ toolCalls = [], onOpenArtifact }: SwarmTabsCardP
         type: "schemes",
         title: sec ? `🏛️ Schemes: ${sec.slice(0, 16)}` : "🏛️ Govt Schemes",
         icon: Landmark,
+        status,
         summary: res.summary,
         spokenSummary: res.spokenSummary,
         result: res.schemes || res.data || res,
+        toolCall: tc,
       });
-    } else if (tc.toolName === "getMandiArbitrage") {
+    } else if (tc.toolName === "getMandiArbitrage" || tc.toolName === "getMandiRates") {
       const comm = args.commodity || res.commodity || res.data?.commodity || "";
       const cleanComm = comm ? comm.split(/[(/ ]/)[0] : "";
       awakenedDomains.push({
@@ -114,9 +176,11 @@ export function SwarmTabsCard({ toolCalls = [], onOpenArtifact }: SwarmTabsCardP
         type: "mandi",
         title: cleanComm ? `🌾 Mandi: ${cleanComm}` : "🌾 Mandi Arbitrage",
         icon: Coins,
+        status,
         summary: res.summary,
         spokenSummary: res.spokenSummary,
         result: res.mandi || res.commodities || res.data || res,
+        toolCall: tc,
       });
     } else if (tc.toolName === "scanCatchmentRadar" || tc.toolName === "searchCompetitors") {
       const cat = args.category || res.category || "";
@@ -125,9 +189,11 @@ export function SwarmTabsCard({ toolCalls = [], onOpenArtifact }: SwarmTabsCardP
         type: "competitors",
         title: cat ? `🏪 Radar: ${cat.slice(0, 16)}` : "🏪 Competitor Radar",
         icon: Store,
+        status,
         summary: res.summary,
         spokenSummary: res.spokenSummary,
         result: res.competitors || res.data || res,
+        toolCall: tc,
       });
     } else if (tc.toolName === "evaluateCreditAndEMI") {
       const amt = args.amount ? `₹${Math.round(args.amount / 100000)}L` : "";
@@ -136,9 +202,11 @@ export function SwarmTabsCard({ toolCalls = [], onOpenArtifact }: SwarmTabsCardP
         type: "credit",
         title: amt ? `💳 Loan: ${amt}` : "💳 Credit & Loan",
         icon: CreditCard,
+        status,
         summary: res.summary,
         spokenSummary: res.spokenSummary,
         result: res.credit || res.data || res,
+        toolCall: tc,
       });
     } else if (tc.toolName === "getOndcIntelligence") {
       const cat = args.category || res.category || "";
@@ -147,9 +215,11 @@ export function SwarmTabsCard({ toolCalls = [], onOpenArtifact }: SwarmTabsCardP
         type: "ondc",
         title: cat ? `🌐 ONDC: ${cat.slice(0, 14)}` : "🌐 ONDC Commerce",
         icon: Globe,
+        status,
         summary: res.summary,
         spokenSummary: res.spokenSummary,
         result: res.ondc || res.data || res,
+        toolCall: tc,
       });
     } else if (tc.toolName === "predictDistrictBusinesses") {
       const dist = args.district || res.district || "";
@@ -158,9 +228,11 @@ export function SwarmTabsCard({ toolCalls = [], onOpenArtifact }: SwarmTabsCardP
         type: "district",
         title: dist ? `🏙️ ${dist.slice(0, 14)}` : "🏙️ District Ventures",
         icon: Building2,
+        status,
         summary: res.summary,
         spokenSummary: res.spokenSummary,
         result: res.districtData || res.data || res,
+        toolCall: tc,
       });
     } else if (
       tc.toolName === "runCustomResearchAgent" ||
@@ -168,29 +240,84 @@ export function SwarmTabsCard({ toolCalls = [], onOpenArtifact }: SwarmTabsCardP
       res.isCustomSubAgent ||
       (res.isArtifact && res.tabTitle)
     ) {
-      const tabTitle = res.tabTitle || args.tabTitle || res.category || "🔍 Research";
+      const tabTitle = res.tabTitle || args.tabTitle || res.category || args.category || "🔍 Research";
       awakenedDomains.push({
         id: tc.toolCallId || `custom_${idx}`,
         type: "custom",
         title: tabTitle.length > 22 ? tabTitle.slice(0, 20) + "…" : tabTitle,
         icon: resolveDynamicIcon(res.icon || args.icon),
+        status,
         summary: res.summary,
         spokenSummary: res.spokenSummary,
         result: res.data || res,
+        toolCall: tc,
       });
     }
   });
 
-  // If no domain agents were awakened, don't render anything
-  if (awakenedDomains.length === 0) return null;
+  // Track user manual selection (null until user explicitly clicks a tab)
+  const [userSelectedTabId, setUserSelectedTabId] = useState<string | null>(null);
+  const [isPayloadModalOpen, setIsPayloadModalOpen] = useState(false);
 
   const isMultiDomain = awakenedDomains.length > 1;
-  const [activeTabId, setActiveTabId] = useState<string>(awakenedDomains[0].id);
+
+  // Default ALWAYS to index 0 unless user explicitly clicked a tab
+  const activeTabId =
+    userSelectedTabId && awakenedDomains.some((d) => d.id === userSelectedTabId)
+      ? userSelectedTabId
+      : (awakenedDomains[0]?.id || "");
 
   const currentDomain =
     awakenedDomains.find((d) => d.id === activeTabId) || awakenedDomains[0];
+  const CurrentIcon = currentDomain?.icon || Layers;
 
-  const contentToDisplay = currentDomain.result?.content || currentDomain.result?.markdown;
+  const contentToDisplay = currentDomain?.result?.content || currentDomain?.result?.markdown;
+
+  if (!currentDomain) return null;
+
+  const tc = currentDomain?.toolCall || toolCalls.find((t) => (t as any).toolCallId === currentDomain.id) || toolCalls[0];
+  const res = currentDomain?.result;
+  const args = (tc?.args || {}) as any;
+
+  const serpapiPayloadData: SerpApiPayloadData = {
+    engine:
+      currentDomain.id === "competitors"
+        ? "google_maps"
+        : currentDomain.id === "schemes" || currentDomain.id === "mandi" || currentDomain.id === "custom"
+        ? "google"
+        : currentDomain.id === "credit"
+        ? "google"
+        : "google_maps",
+    query:
+      args?.query ||
+      (currentDomain.id === "competitors"
+        ? `${args?.category || "Commercial Retail"} in ${args?.location || "Local Catchment"}`
+        : currentDomain.id === "mandi"
+        ? `${args?.commodity || "Agriculture"} Mandi Wholesale Spot Price APMC`
+        : currentDomain.id === "schemes"
+        ? `${args?.sector || "MSME"} Central & State Government Subsidy Scheme`
+        : currentDomain.id === "swot"
+        ? `Market competition & SWOT dynamics for ${args?.category || "Business"}`
+        : `${currentDomain.title} Research Grounding`),
+    location: args?.location || "Local Catchment",
+    coordinates: args?.lat && args?.lon ? `@${args.lat},${args.lon}` : undefined,
+    radiusKm: args?.radiusKm,
+    resultsCount:
+      res?.competitors?.length ||
+      res?.data?.competitors?.length ||
+      res?.schemes?.length ||
+      res?.rates?.length ||
+      4,
+    items:
+      res?.competitors ||
+      res?.data?.competitors ||
+      res?.schemes ||
+      res?.rates ||
+      res?.data?.cards ||
+      [],
+    rawResponse: res,
+    timestamp: new Date().toISOString(),
+  };
 
   return (
     <div className="w-full my-3 font-sans animate-in fade-in duration-200">
@@ -207,13 +334,19 @@ export function SwarmTabsCard({ toolCalls = [], onOpenArtifact }: SwarmTabsCardP
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3">
-          <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10.5px] font-medium bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/25">
+          <button
+            type="button"
+            onClick={() => setIsPayloadModalOpen(true)}
+            className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10.5px] font-medium bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 hover:border-emerald-500/50 transition-all cursor-pointer shadow-2xs group"
+            title="Inspect raw SerpApi live query and payload"
+          >
             <span className="relative flex h-1.5 w-1.5">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
             </span>
             <span>SerpApi Grounded</span>
-          </div>
+            <Code2 className="size-3 text-emerald-600 dark:text-emerald-400 opacity-60 group-hover:opacity-100 transition-opacity ml-0.5" />
+          </button>
 
           {onOpenArtifact && (
             <button
@@ -257,7 +390,7 @@ export function SwarmTabsCard({ toolCalls = [], onOpenArtifact }: SwarmTabsCardP
               <button
                 key={domain.id}
                 onClick={() => {
-                  setActiveTabId(domain.id);
+                  setUserSelectedTabId(domain.id);
                   setTimeout(() => {
                     window.dispatchEvent(new Event("resize"));
                   }, 50);
@@ -293,7 +426,12 @@ export function SwarmTabsCard({ toolCalls = [], onOpenArtifact }: SwarmTabsCardP
       {/* ── Native Content Viewport: Renders Directly in Chat Without Artificial Borders ── */}
       <div className="pt-2 text-foreground">
         {contentToDisplay ? (
-          <MarkdownMessage content={contentToDisplay} variant="assistant" />
+          <MarkdownMessage
+            key={currentDomain.id}
+            content={contentToDisplay}
+            variant="assistant"
+            isStreaming={Boolean(isStreaming) && currentDomain.status === "calling"}
+          />
         ) : (
           <>
             {currentDomain.type === "swot" && (
@@ -326,6 +464,13 @@ export function SwarmTabsCard({ toolCalls = [], onOpenArtifact }: SwarmTabsCardP
           </>
         )}
       </div>
+
+      {/* ── SerpApi Payload Inspection Modal ── */}
+      <SerpApiPayloadModal
+        isOpen={isPayloadModalOpen}
+        onClose={() => setIsPayloadModalOpen(false)}
+        data={serpapiPayloadData}
+      />
     </div>
   );
 }

@@ -24,6 +24,13 @@ export interface ToolContext {
   imageBuffer?: Buffer;
   imageMimeType?: string;
   savedImageUrl?: string;
+  onToolDelta?: (d: {
+    toolCallId: string;
+    toolName: string;
+    content: string;
+    replace?: boolean;
+    args?: any;
+  }) => void;
   [key: string]: any;
 }
 

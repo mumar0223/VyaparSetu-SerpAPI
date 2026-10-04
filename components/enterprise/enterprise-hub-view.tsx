@@ -29,7 +29,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Calendar,
+  Code2,
 } from "lucide-react";
+import { SerpApiPayloadModal, type SerpApiPayloadData } from "@/components/ui/serpapi-payload-modal";
 import {
   ResponsiveContainer,
   BarChart,
@@ -260,9 +262,11 @@ ${summary || "Grounded business research report."}`;
 function SelectedRecordBanner({
   record,
   onBack,
+  onInspectPayload,
 }: {
   record: EnterpriseRecord;
   onBack: () => void;
+  onInspectPayload?: () => void;
 }) {
   return (
     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-white/70 dark:bg-card/70 border border-sage/30 dark:border-border shadow-xs">
@@ -274,9 +278,20 @@ function SelectedRecordBanner({
         <ArrowLeft className="size-4" />
         <span>Back to all {record.domain.toUpperCase()} reports</span>
       </button>
-      <div className="flex items-center gap-3 text-xs">
-        <span className="text-muted-foreground">Source Conversation:</span>
-        <span className="font-semibold text-foreground truncate max-w-[200px]">
+      <div className="flex items-center gap-2.5 flex-wrap text-xs">
+        {onInspectPayload && (
+          <button
+            type="button"
+            onClick={onInspectPayload}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 text-xs font-semibold transition-colors cursor-pointer"
+            title="Inspect raw SerpApi payload"
+          >
+            <Code2 className="size-3 text-emerald-600 dark:text-emerald-400" />
+            <span>Inspect SerpApi JSON</span>
+          </button>
+        )}
+        <span className="text-muted-foreground hidden sm:inline">Source Conversation:</span>
+        <span className="font-semibold text-foreground truncate max-w-[150px] sm:max-w-[200px]">
           {record.chatTitle}
         </span>
         <Link
@@ -447,6 +462,7 @@ export function EnterpriseHubView({
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedRecord, setSelectedRecord] = useState<EnterpriseRecord | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isPayloadModalOpen, setIsPayloadModalOpen] = useState(false);
 
   // Sync activeTab when tabParam in URL changes
   useEffect(() => {
@@ -948,7 +964,11 @@ export function EnterpriseHubView({
           <div className="space-y-6 animate-in fade-in duration-200">
             {selectedRecord ? (
               <div className="space-y-6 animate-in fade-in duration-200">
-                <SelectedRecordBanner record={selectedRecord} onBack={handleBackToList} />
+                <SelectedRecordBanner
+                  record={selectedRecord}
+                  onBack={handleBackToList}
+                  onInspectPayload={() => setIsPayloadModalOpen(true)}
+                />
                 <div className="p-6 md:p-8 rounded-3xl bg-white/80 dark:bg-card/80 border border-sage/30 dark:border-border shadow-xs backdrop-blur-xs">
                   <MarkdownMessage content={getOrSynthesizeMarkdown(selectedRecord)} />
                 </div>
@@ -999,7 +1019,11 @@ export function EnterpriseHubView({
           <div className="space-y-6 animate-in fade-in duration-200">
             {selectedRecord ? (
               <div className="space-y-6 animate-in fade-in duration-200">
-                <SelectedRecordBanner record={selectedRecord} onBack={handleBackToList} />
+                <SelectedRecordBanner
+                  record={selectedRecord}
+                  onBack={handleBackToList}
+                  onInspectPayload={() => setIsPayloadModalOpen(true)}
+                />
                 <div className="p-6 md:p-8 rounded-3xl bg-white/80 dark:bg-card/80 border border-sage/30 dark:border-border shadow-xs backdrop-blur-xs">
                   <MarkdownMessage content={getOrSynthesizeMarkdown(selectedRecord)} />
                 </div>
@@ -1047,7 +1071,11 @@ export function EnterpriseHubView({
           <div className="space-y-6 animate-in fade-in duration-200">
             {selectedRecord ? (
               <div className="space-y-6 animate-in fade-in duration-200">
-                <SelectedRecordBanner record={selectedRecord} onBack={handleBackToList} />
+                <SelectedRecordBanner
+                  record={selectedRecord}
+                  onBack={handleBackToList}
+                  onInspectPayload={() => setIsPayloadModalOpen(true)}
+                />
                 <div className="p-6 md:p-8 rounded-3xl bg-white/80 dark:bg-card/80 border border-sage/30 dark:border-border shadow-xs backdrop-blur-xs">
                   <MarkdownMessage content={getOrSynthesizeMarkdown(selectedRecord)} />
                 </div>
@@ -1095,7 +1123,11 @@ export function EnterpriseHubView({
           <div className="space-y-6 animate-in fade-in duration-200">
             {selectedRecord ? (
               <div className="space-y-6 animate-in fade-in duration-200">
-                <SelectedRecordBanner record={selectedRecord} onBack={handleBackToList} />
+                <SelectedRecordBanner
+                  record={selectedRecord}
+                  onBack={handleBackToList}
+                  onInspectPayload={() => setIsPayloadModalOpen(true)}
+                />
                 <div className="p-6 md:p-8 rounded-3xl bg-white/80 dark:bg-card/80 border border-sage/30 dark:border-border shadow-xs backdrop-blur-xs">
                   <MarkdownMessage content={getOrSynthesizeMarkdown(selectedRecord)} />
                 </div>
@@ -1143,7 +1175,11 @@ export function EnterpriseHubView({
           <div className="space-y-6 animate-in fade-in duration-200">
             {selectedRecord ? (
               <div className="space-y-6 animate-in fade-in duration-200">
-                <SelectedRecordBanner record={selectedRecord} onBack={handleBackToList} />
+                <SelectedRecordBanner
+                  record={selectedRecord}
+                  onBack={handleBackToList}
+                  onInspectPayload={() => setIsPayloadModalOpen(true)}
+                />
                 <div className="p-6 md:p-8 rounded-3xl bg-white/80 dark:bg-card/80 border border-sage/30 dark:border-border shadow-xs backdrop-blur-xs">
                   <MarkdownMessage content={getOrSynthesizeMarkdown(selectedRecord)} />
                 </div>
@@ -1236,7 +1272,11 @@ export function EnterpriseHubView({
           <div className="space-y-6 animate-in fade-in duration-200">
             {selectedRecord ? (
               <div className="space-y-6 animate-in fade-in duration-200">
-                <SelectedRecordBanner record={selectedRecord} onBack={handleBackToList} />
+                <SelectedRecordBanner
+                  record={selectedRecord}
+                  onBack={handleBackToList}
+                  onInspectPayload={() => setIsPayloadModalOpen(true)}
+                />
                 <div className="p-6 md:p-8 rounded-3xl bg-white/80 dark:bg-card/80 border border-sage/30 dark:border-border shadow-xs backdrop-blur-xs">
                   <MarkdownMessage content={getOrSynthesizeMarkdown(selectedRecord)} />
                 </div>
@@ -1279,6 +1319,46 @@ export function EnterpriseHubView({
           </div>
         )}
       </div>
+
+      {/* ── SerpApi Payload Inspection Modal ── */}
+      <SerpApiPayloadModal
+        isOpen={isPayloadModalOpen}
+        onClose={() => setIsPayloadModalOpen(false)}
+        data={
+          selectedRecord
+            ? {
+                engine:
+                  selectedRecord.domain === "competitors"
+                    ? "google_maps"
+                    : selectedRecord.domain === "swot"
+                    ? "google_maps"
+                    : "google",
+                query:
+                  selectedRecord.title ||
+                  `${selectedRecord.domain.toUpperCase()} Audit for ${shopName} in ${location}`,
+                location: location,
+                resultsCount:
+                  selectedRecord.data?.competitors?.length ||
+                  selectedRecord.data?.schemes?.length ||
+                  selectedRecord.data?.rates?.length ||
+                  selectedRecord.data?.cards?.length ||
+                  4,
+                items:
+                  selectedRecord.data?.competitors ||
+                  selectedRecord.data?.schemes ||
+                  selectedRecord.data?.rates ||
+                  selectedRecord.data?.cards ||
+                  [],
+                rawResponse: selectedRecord.data,
+                timestamp: selectedRecord.timestamp
+                  ? typeof selectedRecord.timestamp === "number"
+                    ? new Date(selectedRecord.timestamp).toISOString()
+                    : String(selectedRecord.timestamp)
+                  : undefined,
+              }
+            : null
+        }
+      />
     </div>
   );
 }

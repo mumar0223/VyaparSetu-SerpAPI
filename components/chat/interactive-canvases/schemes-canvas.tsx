@@ -2,7 +2,24 @@
 
 import React from "react";
 import { Landmark, ExternalLink, CheckSquare, ShieldCheck } from "lucide-react";
-import type { SchemesEvaluationPayload } from "@/lib/agent/subagents/schemes-subagent";
+export interface SchemesEvaluationPayload {
+  businessSector: string;
+  topRecommendation: {
+    schemeName: string;
+    reason: string;
+    potentialSavingsOrSubsidy: string;
+  };
+  schemes: Array<{
+    id: string;
+    name: string;
+    officialPortal?: string;
+    maxAssistance?: string;
+    subsidyPercentage?: string;
+    collateralRequired?: boolean;
+    keyBenefit?: string;
+    checklist: string[];
+  }>;
+}
 
 interface SchemesCanvasProps {
   data: SchemesEvaluationPayload;

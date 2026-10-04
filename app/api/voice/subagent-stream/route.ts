@@ -105,6 +105,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    let emitToolDelta: (d: any) => void = () => {};
     const allTools = getAgentTools({
       userId: user.id,
       conversationId,
@@ -113,6 +114,7 @@ export async function POST(req: NextRequest) {
       savedImageUrl: savedImageUrl || undefined,
       sharpnessScore,
       isCameraActive,
+      onToolDelta: (d) => emitToolDelta(d),
     });
     const tools: Record<string, any> = { ...allTools };
     // Subagent model does not need captureDocument tool because the browser directly captures and attaches the image in multimodal vision (userParts)
@@ -337,6 +339,8 @@ STRICT REGULATORY, SAFETY & PROHIBITED COMMERCE POLICY (MANDATORY):
           }
         };
 
+        emitToolDelta = (d) => sendEvent("tool_result_delta", d);
+
         sendEvent("status", {
           status: "working",
           activeTool: "research",
@@ -487,8 +491,14 @@ STRICT REGULATORY, SAFETY & PROHIBITED COMMERCE POLICY (MANDATORY):
                   ? def.formatSummary(toolArgs)
                   : `Executing ${name}...`;
 
+              const toolCallId =
+                context?.toolCallId ||
+                (context as any)?.id ||
+                `call_${Date.now()}_${name}`;
+
               sendEvent("tool_call", {
                 toolName: name,
+                toolCallId,
                 icon: def.icon || "bot",
                 args: toolArgs,
                 summary,
@@ -497,7 +507,7 @@ STRICT REGULATORY, SAFETY & PROHIBITED COMMERCE POLICY (MANDATORY):
 
               let toolOut: any = null;
               try {
-                toolOut = await (t as any).execute(toolArgs, context);
+                toolOut = await (t as any).execute(toolArgs, { ...context, toolCallId });
               } catch (execErr: any) {
                 toolOut = { success: false, error: execErr?.message || "Execution error" };
               }
@@ -508,7 +518,7 @@ STRICT REGULATORY, SAFETY & PROHIBITED COMMERCE POLICY (MANDATORY):
                   : "Completed";
 
               const invocationRecord = {
-                toolCallId: `call_${Date.now()}_${name}`,
+                toolCallId,
                 toolName: name,
                 args: toolArgs,
                 result: toolOut,
@@ -517,6 +527,7 @@ STRICT REGULATORY, SAFETY & PROHIBITED COMMERCE POLICY (MANDATORY):
 
               sendEvent("tool_result", {
                 toolName: name,
+                toolCallId,
                 icon: def.icon || "bot",
                 args: toolArgs,
                 result: toolOut,

@@ -10,7 +10,23 @@ import {
   Star,
   CheckCircle,
 } from "lucide-react";
-import type { SWOTAnalysisPayload } from "@/lib/agent/subagents/swot-subagent";
+export interface SWOTAnalysisPayload {
+  businessCategory: string;
+  location: string;
+  radiusKm: number;
+  totalCompetitorsFound: number;
+  strengths: string[];
+  weaknesses: string[];
+  opportunities: string[];
+  threats: string[];
+  competitorHighlights?: Array<{
+    name: string;
+    distance: string;
+    threatLevel: "High" | "Medium" | "Low";
+    rating?: number;
+  }>;
+  strategicActionPlan: string[];
+}
 
 interface SWOTCanvasProps {
   data: SWOTAnalysisPayload;

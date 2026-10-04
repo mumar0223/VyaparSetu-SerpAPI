@@ -1,34 +1,41 @@
 import { searchCatchmentShops, searchGoogleWeb } from "../serpapi-service";
+import { getLanguageModel } from "../ai-provider";
+import { DASHBOARD_CHAT_CONFIG } from "../chat-config";
+import { z } from "zod";
+import { streamStructured } from "./stream-structured";
 
-export interface SWOTAnalysisPayload {
-  businessCategory: string;
+export interface SwotSubAgentResult {
+  category: string;
   location: string;
-  radiusKm: number;
   totalCompetitorsFound: number;
-  strengths: string[];
-  weaknesses: string[];
-  opportunities: string[];
-  threats: string[];
-  competitorHighlights: Array<{
-    name: string;
-    distance: string;
-    rating?: number;
-    threatLevel: "High" | "Medium" | "Low";
-  }>;
-  strategicActionPlan: string[];
+  markdown: string;
+  summary: string;
+  spokenSummary: string;
 }
+
+const SwotOutputSchema = z.object({
+  markdown: z.string().describe("Comprehensive Markdown SWOT analysis dossier with catchment brief, ```cards, 4-quadrant SWOT matrix table, competitor cluster list with distance & ratings, and actionable strategic action plan"),
+  summary: z.string().describe("1-2 sentence executive summary for chat pill"),
+  spokenSummary: z.string().describe("1 concise sentence suitable for text-to-speech audio feedback"),
+});
 
 /**
  * Autonomous Sub-Agent for SWOT Intelligence.
  * Grounded in real-time SerpApi Google Maps places & Web market trends.
+ * Zero hardcoded fallback arrays, zero mock lists, zero hardcoded markdown templates.
  */
-export async function runSWOTSubAgent(params: {
-  category: string;
-  location?: string;
-  lat?: number;
-  lon?: number;
-  radiusKm?: number;
-}): Promise<SWOTAnalysisPayload> {
+export async function runSWOTSubAgent(
+  params: {
+    category: string;
+    location?: string;
+    lat?: number;
+    lon?: number;
+    radiusKm?: number;
+  },
+  opts?: {
+    onMarkdown?: (md: string) => void;
+  }
+): Promise<SwotSubAgentResult> {
   const category = params.category || "Retail Grocery & Kirana";
   const location = params.location || "Indiranagar, Bangalore";
   const radiusKm = params.radiusKm || 5;
@@ -52,56 +59,57 @@ export async function runSWOTSubAgent(params: {
     ? (shops.reduce((acc, s) => acc + (s.rating || 3.5), 0) / shops.length).toFixed(1)
     : "4.0";
 
-  // 2. Synthesize Grounded SWOT
-  const strengths = [
-    `Hyper-local proximity advantage: operating directly within the target ${location} catchment.`,
-    "Direct customer relationship & personalized service compared to distant e-commerce fulfillment.",
-    "Agile procurement: ability to rapidly adapt local inventory to neighborhood demand spikes.",
-  ];
+  const model = getLanguageModel(
+    DASHBOARD_CHAT_CONFIG.provider,
+    DASHBOARD_CHAT_CONFIG.model
+  );
 
-  const weaknesses = [
-    totalCompetitors > 10
-      ? `High competitor cluster density: detected ${totalCompetitors} established players within ${radiusKm}km.`
-      : "Limited initial brand recognition against entrenched neighborhood outlets.",
-    "Working capital constraints compared to capitalized retail chains.",
-    "Dependency on manual counter billing versus automated omnichannel inventory systems.",
-  ];
+  const prompt = `You are an elite retail strategy consultant and business intelligence analyst sub-agent.
+Build an authentic, comprehensive 4-Quadrant SWOT Matrix and Competitor Catchment dossier in rich Markdown for a "${category}" business in "${location}" (${radiusKm}km radius).
 
-  const opportunities = [
-    "ONDC & Hyper-local Delivery: listing catalog on open commerce networks for 30-minute delivery.",
-    "Credit & Khata Digitalization: offering trust-based credit to recurring neighborhood households.",
-    "Niche & High-Margin Specialization: curating organic, artisanal, or regionally authentic items.",
-    `Unmet service gaps: average competitor rating in area is ${avgRating}★, leaving room for superior customer experience.`,
-  ];
+REAL-TIME CATCHMENT COMPETITOR GROUNDING (Google Maps via SerpApi):
+- Total Competitors Mapped: ${totalCompetitors}
+- Average Competitor Rating: ${avgRating}★
+- High Threat Rivals (4.3+★ & high reviews): ${highThreatCount}
+- Top Verified Competitors:
+${JSON.stringify(shops.slice(0, 10).map((s) => ({ name: s.name, distance: s.distance, rating: s.rating, reviews: s.reviews, threat: s.threatLevel })), null, 2)}
 
-  const threats = [
-    highThreatCount > 2
-      ? `Presence of ${highThreatCount} high-threat competitors with 4.3+★ ratings and large review volume.`
-      : "Aggressive promotional discounting by deep-pocketed quick-commerce dark stores.",
-    "Wholesale price volatility and commodity inflation tightening gross margins.",
-  ];
+MARKET WEB GROUNDING VIA SERPAPI:
+${JSON.stringify(webTrends, null, 2)}
 
-  const strategicActionPlan = [
-    `Target under-served catchment micro-zones beyond ${shops[0]?.distance || "500m"} from top-rated competitors.`,
-    "Introduce UPI QR cashbacks & WhatsApp order-ahead pickup to counter quick-commerce attrition.",
-    "Optimize supplier credit terms to match 21-day customer inventory turnaround.",
-  ];
+TASK:
+Produce an authentic, comprehensive SWOT Intelligence Dossier in Markdown format.
+Include:
+1. Heading: ### 🧭 Strategic 4-Quadrant SWOT Matrix: ${category} (${location})
+2. Catchment Analysis Brief (2-3 sentences analyzing competitor saturation, density, and neighborhood customer demand).
+3. A fenced \`\`\`cards block with 3 key metric cards (JSON with title "SWOT Catchment Snapshot" and cards array with label, value, status e.g. "positive", subtext). E.g. Competitors Mapped, Growth Opportunities, High-Threat Rivals.
+4. The 4-Quadrant SWOT Matrix in a Markdown Table:
+| Quadrant | Strategic Factors & Findings |
+Include 3-4 concrete bullet points for Strengths (ताकत), Weaknesses (कमजोरी), Opportunities (अवसर), and Threats (चुनौतियां) tailored to this specific local catchment.
+5. Local Competitor Cluster Density Table:
+| Business Name | Distance | Rating | Threat Level |
+List verified competitors from the Google Maps data.
+6. Strategic Action Plan: 3 concrete execution steps for this business.
+7. A 1-2 sentence executive summary for chat and 1 concise sentence spoken summary for voice agents.`;
+
+  const parsed = await streamStructured({
+    model,
+    prompt,
+    schema: SwotOutputSchema,
+    temperature: 0.2,
+    onPartial: (p) => {
+      if (p.markdown) {
+        opts?.onMarkdown?.(p.markdown);
+      }
+    },
+  });
 
   return {
-    businessCategory: category,
+    category,
     location,
-    radiusKm,
     totalCompetitorsFound: totalCompetitors,
-    strengths,
-    weaknesses,
-    opportunities,
-    threats,
-    competitorHighlights: shops.slice(0, 6).map((s) => ({
-      name: s.name,
-      distance: s.distance,
-      rating: s.rating,
-      threatLevel: s.threatLevel,
-    })),
-    strategicActionPlan,
+    markdown: parsed.markdown,
+    summary: parsed.summary || `SWOT scan completed: Analyzed ${totalCompetitors} competitors in ${location}.`,
+    spokenSummary: parsed.spokenSummary || `SWOT analysis for ${category} in ${location} completed with live Google Maps competitor density.`,
   };
 }

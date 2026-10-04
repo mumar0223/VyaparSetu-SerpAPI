@@ -1,7 +1,8 @@
 import { searchGoogleWeb, GoogleWebResult } from "../serpapi-service";
 import { getLanguageModel } from "../ai-provider";
 import { DASHBOARD_CHAT_CONFIG } from "../chat-config";
-import { generateText } from "ai";
+import { z } from "zod";
+import { streamStructured } from "./stream-structured";
 
 export interface CustomResearchParams {
   tabTitle: string;
@@ -22,6 +23,12 @@ export interface CustomResearchResult {
   sources: Array<{ title: string; url: string }>;
 }
 
+const CustomLlmSchema = z.object({
+  markdown: z.string().describe("Complete Markdown content containing the cards, table, calculator, and checklist"),
+  summary: z.string().describe("1-2 sentence executive summary for chat"),
+  spokenSummary: z.string().describe("1 concise sentence suitable for text-to-speech audio feedback"),
+});
+
 /**
  * Autonomous Sub-Agent for On-Demand Custom Domain Research.
  * Enables the Head AI to awaken dynamic sub-agents for unmapped domains
@@ -29,7 +36,10 @@ export interface CustomResearchResult {
  * with 100% SerpApi Google Search web grounding and interactive calculator sliders.
  */
 export async function runCustomResearchSubAgent(
-  params: CustomResearchParams
+  params: CustomResearchParams,
+  opts?: {
+    onMarkdown?: (md: string) => void;
+  }
 ): Promise<CustomResearchResult> {
   const tabTitle = params.tabTitle || "🔍 Specialized Research";
   const category = params.category || "Commercial Domain";
@@ -64,27 +74,23 @@ Produce an authentic, highly actionable Stage Document dossier in Markdown forma
 Include:
 1. Executive Brief with strategic context.
 2. A fenced \`\`\`cards block containing 3 to 4 concise metrics (Cards JSON format with title and cards array containing label, value, status, subtext).
-3. A structured Markdown comparison table (e.g. Capex Breakdown, Machinery Specifications, or Phased Compliance Milestones).
+3. A structured Markdown comparison table (e.g. Capex Breakdown, Machinery Specifications, or Phased Compliance Milestones). If comparing numerical costs or equipment tiers, you may also include a fenced \`\`\`chart block with JSON (never use mermaid for charts).
 4. An interactive formula simulator fenced in a \`\`\`calculator block.
    - The calculator JSON must have "title", "description", "inputs" (array of sliders or selectors with id, label, type, min, max, step, defaultValue, unit), and "outputs" (array of formulas using input ids, format e.g. "currency" or "percentage", highlight: true).
 5. Phased implementation checklist with statutory portal links and DPR documentation requirements.
-6. A 1-sentence spoken summary for the voice agent.
+6. A 1-sentence spoken summary for the voice agent.`;
 
-Respond with ONLY a valid JSON object matching this schema:
-{
-  "summary": "1-2 sentence executive summary for chat",
-  "spokenSummary": "1 concise sentence suitable for text-to-speech audio feedback",
-  "markdown": "Complete Markdown content containing the cards, table, calculator, and checklist"
-}`;
-
-    const { text } = await generateText({
+    const parsed = await streamStructured({
       model,
       prompt,
+      schema: CustomLlmSchema,
       temperature: 0.2,
+      onPartial: (p) => {
+        if (p.markdown) {
+          opts?.onMarkdown?.(p.markdown);
+        }
+      },
     });
-
-    const cleaned = text.trim().replace(/^```json/i, "").replace(/^```/i, "").replace(/```$/i, "").trim();
-    const parsed = JSON.parse(cleaned);
 
     return {
       tabTitle,
@@ -96,60 +102,7 @@ Respond with ONLY a valid JSON object matching this schema:
       sources,
     };
   } catch (err: any) {
-    console.warn("[custom-research-subagent] Fallback due to parsing error:", err?.message);
-
-    // Fallback template
-    const fallbackMarkdown = `### ${tabTitle}: ${category}
-
-Comprehensive domain intelligence synthesized via SerpApi Google Search.
-
-\`\`\`cards
-${JSON.stringify({
-  title: `${category} Key Metrics`,
-  cards: [
-    { label: "Domain Category", value: category.slice(0, 18), status: "neutral", subtext: "Commercial classification" },
-    { label: "Market Viability", value: "High Growth", status: "positive", subtext: "Verified sector velocity" },
-    { label: "Information Status", value: "Verified Active", status: "positive", subtext: "SerpApi web grounded" },
-  ],
-}, null, 2)}
-\`\`\`
-
-\`\`\`calculator
-${JSON.stringify({
-  title: `${category} Investment & ROI Simulator`,
-  description: "Adjust capital outlay and operating margin to simulate annual returns live",
-  inputs: [
-    { id: "capex", label: "Capital Expenditure (Capex)", type: "slider", min: 100000, max: 5000000, step: 50000, defaultValue: 1000000, unit: "₹" },
-    { id: "margin", label: "Net Operating Margin", type: "slider", min: 10, max: 40, step: 2, defaultValue: 24, unit: "%" },
-    { id: "turnover", label: "Est. Annual Turnover", type: "slider", min: 500000, max: 10000000, step: 100000, defaultValue: 3000000, unit: "₹" }
-  ],
-  outputs: [
-    { label: "Annual Operating Profit", formula: "turnover * (margin / 100)", format: "currency", highlight: true },
-    { label: "Est. Payback Period", formula: "round((capex / (turnover * (margin / 100))) * 12)", format: "number", unit: "Months" }
-  ]
-}, null, 2)}
-\`\`\`
-
-| Key Aspect | Strategic Insight | Recommendation |
-| :--- | :--- | :--- |
-| **Machinery & Infra** | Sourced from certified OEMs with ISO & BIS certification | Verify 1-year AMC and warranty terms |
-| **Statutory Licensing** | Mandatory state clearance and local municipal trade license | Register via single-window investor portal |
-| **Working Capital** | 90 days operating cash cycle recommended | Tie up CGTMSE collateral-free credit |
-
-#### 📋 Actionable Setup Checklist:
-- [ ] Prepare detailed project report (DPR) with technical consultant
-- [ ] File single-window industrial registration on state MSME portal
-- [ ] Obtain electricity load sanction and local pollution board NOC
-- [ ] Establish raw material supplier agreements and distributor off-take contracts`;
-
-    return {
-      tabTitle,
-      category,
-      icon,
-      summary: `**${tabTitle}**: Deep domain research completed with live SerpApi Google search grounding.`,
-      spokenSummary: params.spokenSummary || `I have synthesized the specialized research for ${tabTitle} with an interactive calculator.`,
-      markdown: fallbackMarkdown,
-      sources,
-    };
+    console.error("[custom-research-subagent] Research generation failed:", err);
+    throw err;
   }
 }

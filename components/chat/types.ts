@@ -8,6 +8,7 @@ export interface ToolCallItem {
   status?: "calling" | "completed" | "error";
   args?: Record<string, any>;
   result?: any;
+  completedAt?: number;
 }
 
 

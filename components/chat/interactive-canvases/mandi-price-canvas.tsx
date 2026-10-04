@@ -2,8 +2,28 @@
 
 import React from "react";
 import { TrendingUp, Truck, ArrowRight, CheckCircle2, AlertCircle } from "lucide-react";
-import type { MandiArbitragePayload } from "@/lib/agent/subagents/mandi-subagent";
 import { formatCurrencyINR } from "@/lib/utils";
+export interface MandiArbitragePayload {
+  commodity: string;
+  baseDistrict: string;
+  aiAdvisory?: string;
+  rates: Array<{
+    mandiName: string;
+    state: string;
+    minPrice: number;
+    maxPrice: number;
+    modalPrice: number;
+    arrivalTons?: number;
+  }>;
+  arbitrageOpportunities: Array<{
+    sourceMandi: string;
+    targetMandi: string;
+    viability: string;
+    priceDifferencePerQuintal: number;
+    estimatedTransportCost: number;
+    netProfitPerQuintal: number;
+  }>;
+}
 
 interface MandiPriceCanvasProps {
   data: MandiArbitragePayload;
