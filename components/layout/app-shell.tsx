@@ -38,7 +38,7 @@ export function AppShell({
   const [conversations, setConversations] = useState<ConversationSummary[]>(
     () => getCachedConversations() || [],
   );
-  const [isSidebarOpen, setIsSidebarOpenRaw] = useState(() => getPersistedSidebarOpen());
+  const [isSidebarOpen, setIsSidebarOpenRaw] = useState(true);
   const setIsSidebarOpen = useCallback((open: boolean | ((prev: boolean) => boolean)) => {
     setIsSidebarOpenRaw((prev) => {
       const next = typeof open === "function" ? open(prev) : open;
@@ -72,6 +72,7 @@ export function AppShell({
   }, []);
 
   useEffect(() => {
+    setIsSidebarOpenRaw(getPersistedSidebarOpen());
     loadData();
 
     const handleConversationsUpdated = (e: any) => {

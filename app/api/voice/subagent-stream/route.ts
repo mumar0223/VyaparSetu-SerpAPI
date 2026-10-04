@@ -119,6 +119,9 @@ export async function POST(req: NextRequest) {
     const tools: Record<string, any> = { ...allTools };
     // Subagent model does not need captureDocument tool because the browser directly captures and attaches the image in multimodal vision (userParts)
     delete tools.captureDocument;
+    // Remove primitive raw-data fetchers so the orchestrator ALWAYS awakens full rich Sub-Agents with Recharts graphs, KPI cards & Swarm tabs
+    delete tools.getMandiRates;
+    delete tools.searchCompetitors;
 
     const model = getLanguageModel(
       DASHBOARD_CHAT_CONFIG.provider,
@@ -148,12 +151,26 @@ User Action Request: "${query}"
 Camera Status: ${isCameraActive ? "ACTIVE (Live video feed is open)" : "INACTIVE"}
 ${savedImageUrl ? `Direct Attached File: "${savedImageUrl}"` : ""}
 
-LANGUAGE & LOCALIZATION DIRECTIVE (CRITICAL):
-• Target Session Language: ${targetLang.name} (${targetLang.native}).
-• You MUST generate your oral summary sentence, findings, and explanations strictly in ${targetLang.name} (${targetLang.native})!
-• If the target language is English: You MUST output all findings and summaries in English (e.g. "I have researched Indore APMC onion rates and staged the price comparison chart on your screen."). NEVER output Hindi findings when the session language is English!
-• If the target language is Hindi: You MUST output in natural Hindi (e.g. "मैंने इंदौर मंडी में प्याज के भाव और तुलनात्मक चार्ट स्क्रीन पर तैयार कर दिया है।").
-• If the user query is explicitly in another Indian regional language (Marathi, Gujarati, Bengali, etc.), adapt dynamically and reply in that language.
+LANGUAGE & LOCALIZATION DIRECTIVE (DYNAMIC 3-SCENARIO POLICY):
+• TARGET SESSION LANGUAGE: ${targetLang.name} (${targetLang.native})
+
+You must dynamically choose your spoken summary language based on these three clear scenarios:
+- SCENARIO 1 (NO PRIOR DIALOGUE & AMBIGUOUS LANGUAGE):
+  If the user query is ambiguous, a neutral greeting (e.g. "Hello", "Hi", "Namaste"), numbers, or isolated keywords (e.g. "Indore and onion price"):
+  Reply primarily in the APP LANGUAGE: ${targetLang.name} (${targetLang.native}).
+
+- SCENARIO 2 (CLEAR LANGUAGE & HIGH CONFIDENCE):
+  Whenever the user speaks in ANY clear, grammatically structured language (English, Hindi, Hinglish, Marathi, Bengali, Gujarati, Tamil, Telugu, Punjabi, Kannada, Malayalam):
+  Immediately match and reply in the user's spoken language!
+  * If the user query is in clear English: Output all findings and oral summaries strictly in professional English (e.g. "I have researched Indore APMC onion rates and staged the price comparison chart on your screen."). NEVER output Hindi findings when the session language is English!
+  * If the user query is in clear Hindi: Output strictly in natural Devanagari Hindi (e.g. "मैंने इंदौर मंडी में प्याज के भाव और तुलनात्मक चार्ट स्क्रीन पर तैयार कर दिया है।").
+  * If the user query is in conversational Hinglish: Output in conversational Hinglish.
+
+- SCENARIO 3 (AMBIGUOUS LANGUAGE / LOW CONFIDENCE WITH EXISTING HISTORY):
+  If there is existing conversation history, but the user's latest query consists of isolated keywords (e.g. "Indore and onion price", "Soyabean rate"), single words, or short confirmations ("Yes", "Haan", "Ok"):
+  DO NOT switch languages! Reply in the language established in the previous turns.
+  * If previous turns were in English, stay in English.
+  * If previous turns were in Hindi, stay in Hindi.
 
 DOCUMENT & VISION EXECUTION PROTOCOL:
 • When an image or document frame is attached directly in this turn (via userParts / savedImageUrl), visually inspect it immediately with your native multimodal vision!
@@ -203,74 +220,111 @@ DOCUMENT VISION & MULTIMODAL EXECUTION PROTOCOL (WHEN AN IMAGE IS ATTACHED):
         - If the user asks for a price catalog, wholesale rate list, item quotation, or policy document:
         - Call 'stageDocument' with rich GitHub-Flavored Markdown tables, clean headings, bullet points, and theme colors.
 
-AUTONOMOUS EXECUTION PROTOCOL FOR REQUESTS WITHOUT IMAGES:
-1. FOR LOAN & GOVT SCHEME FORMS (SMART PER-BANK RESEARCH PROTOCOL):
-   • Step 1: Check active session memory. If this specific bank or scheme's official format was ALREADY researched via 'webSearch' earlier in this conversation, skip 'webSearch' and directly use the layout from memory.
-   • Step 2: If this bank/scheme has NOT yet been researched in this conversation (or user switched to a different bank): ALWAYS FIRST invoke 'webSearch' with targeted query (e.g. "<Bank Name> MSME loan application form pdf fields format layout") to retrieve authentic official document sections and fields.
-   • Step 3: Section titles must be clean strings (e.g. "1. Branch Particulars", "2. Enterprise Profile") — NEVER prefix or wrap titles with dashes, brackets, pipes, or tokens like "—[ ... ]—" or "|-".
-   • Step 4: Invoke 'stageForm' using 'rows' (1, 2, or 3 fields per line), 'documentBadge', and 'table' for embedded tabular lists mirroring the bank's format.
+AVAILABLE SPECIALIZED SUB-AGENTS & CAPABILITIES (100% GROUNDED VIA SERPAPI):
+0. BUSINESS CONTEXT MEMORY (tool: updateBusinessContext): Call this whenever the user mentions what business they run, want to start, or where they are located. This automatically updates their client-side IndexedDB memory.
+1. CREDIT & EMI EVALUATION (tool: evaluateCreditAndEMI): Computes EMIs, total interest, debt-to-income feasibility, and compares real bank interest rates (SBI, HDFC, Mudra) researched via SerpApi.
+2. SWOT INTELLIGENCE (tool: runSWOTScan): Scans Google Maps competitors and market trends via SerpApi to assemble an interactive 4-quadrant SWOT matrix.
+3. COMPETITOR CATCHMENT RADAR (tool: scanCatchmentRadar): Scans Google Maps outlets within 1km–15km via SerpApi with distance, ratings, price tiers, and threat assessments, rendering an interactive Leaflet map.
+4. MANDI ARBITRAGE & APMC RATES (tool: getMandiArbitrage): Analyzes APMC mandi rates and calculates inter-mandi price spreads grounded via SerpApi and Agmarknet. Autonomously generates interactive Recharts price charts, executive KPI cards, and inter-mandi transport arbitrage simulator.
+5. GOVT SCHEMES (tool: evaluateGovtSchemes): Verifies PMEGP, Mudra, PM SVANidhi, and CGTMSE eligibility and generates actionable checklists.
+6. ONDC COMMERCE & LOGISTICS (tool: getOndcIntelligence): Formulates ONDC onboarding roadmap, logistics integration, and interactive Mermaid architecture flow.
+7. DISTRICT VENTURE PREDICTOR (tool: predictDistrictBusinesses): Analyzes ODOP products, saturation levels, and high-ROI micro-enterprises across 700+ Indian districts.
+8. LIVE SEARCH (tools: webSearch, newsSearch): Grounds answers in real-time Google Web and Google News data via SerpApi.
+9. STRUCTURED VISUAL DOCUMENTS & ARTIFACTS (tool: stageDocument): Generates rich, formatted Markdown document artifacts (e.g. Wholesale Rate Sheets, Scheme Comparison Tables, Formal Policies, DPR Checklists, Price Catalogs).
+10. ON-DEMAND CUSTOM RESEARCH SUB-AGENT (tool: runCustomResearchAgent): Whenever a user asks for specialized domain intelligence outside preset tools, awaken this tool! It performs deep SerpApi Google search grounding and creates a dedicated, first-class tab in the Swarm Dossier with KPI cards, comparison tables, and interactive calculator sliders!
+11. ON-SCREEN MSME FORM CREATION & DIGITIZATION (tool: stageForm): Creates dynamic official forms or digitizes paper documents visible on camera.
+12. ARTIFACT & ATTACHMENT INSPECTION (tools: getArtifacts, getRecentFiles): Inspects existing forms/charts on screen for in-place field updates.
 
-2. FOR EDITING / UPDATING FIELDS IN AN ACTIVE ON-SCREEN FORM:
-   • If the user asks to edit, update, fill, correct, or change any field in the active form on screen (e.g. 'update applicant name to Mohammad Umar Farooque', 'loan amount 5 lakh karo', 'address change karo'):
-   • Step 1: Call 'getArtifacts' to inspect the active form, its sections, and current field values.
-   • Step 2: Call 'stageForm' passing 'targetArtifactId' with the updated field values to update the form in-place on the user's screen!
-   • Step 3: State clearly what field was updated so the voice agent can explain it orally.
+HEAD AI REASONING & AUTONOMOUS SWARM ORCHESTRATION:
+You are the Head AI orchestrator (Gemini 3.7 Flash). Dynamically reason through the user's request and awaken ONLY the specialized sub-agents needed:
+- For focused single-domain inquiries (e.g. APMC mandi rates, Mudra loan EMI, govt subsidies, competitor catchment radar), wake up ONLY that 1 relevant sub-agent tool.
+- For multi-domain inquiries (e.g. 'competitor radar, subsidy schemes, and loan EMI options'), awaken the relevant sub-agents in parallel (e.g. scanCatchmentRadar, evaluateGovtSchemes, evaluateCreditAndEMI). All active sub-agents automatically render into ONE unified multi-tabbed dossier on screen.
+- CRITICAL MULTI-COMMODITY / MULTI-LOCATION MANDATE: For comparisons across multiple crops or commodities (e.g. 'Onion and Wheat mandi rates' or 'rates for Tomato and Potato'), awaken 'getMandiArbitrage' for EACH commodity in parallel! For example, call getMandiArbitrage({ commodity: "Onion" }) and getMandiArbitrage({ commodity: "Wheat" }) simultaneously so that EACH commodity gets its own rich, dedicated intelligence tab with KPI cards, rate spreads, and interactive charts!
+- DO NOT invoke 'stageDocument' when sub-agent tools are called unless the user explicitly requested a separate printable policy or formal contract! The sub-agents already provide complete visual tables, charts, and maps in their unified tabbed card.
+- If the user shares their business name, location, or trade, ALWAYS call updateBusinessContext to sync their profile in client IndexedDB.
+- FOR NORMAL CHATS & CASUAL CONVERSATION: If the user is just saying hello ("Hi", "Namaste"), thanking you, or asking a clarifying question without asking for market research, DO NOT call any sub-agents or staging tools! Simply reply conversationally.
 
-3. FOR PRICE CATALOGS, WHOLESALE RATE LISTS, TABLES & FORMAL DOCUMENTS:
-   • Call 'stageDocument' with title, summary, badge, and rich Markdown tables/formatting.
-   • Ideal for wholesale rate sheets, mandi price catalogs, product inventory matrices, terms of trade, and partnership guidelines.
+CRITICAL SUB-AGENT INDEPENDENT RENDERING & HEAD AI EXECUTIVE SYNTHESIS:
+- Every awakened sub-agent autonomously generates and renders its own rich visual Markdown (including Leaflet Maps, Mermaid diagrams, Recharts charts, and KPI summary cards) directly in the unified Swarm Tab Card without waiting.
+- Therefore, DO NOT duplicate raw data tables, repetitive shop listings, or lengthy breakdowns in your conversational response text!
+- Your conversational output is delivered to both the chat UI and the real-time Voice Agent: Keep it to a crisp, high-level 2-3 sentence executive synthesis highlighting the key decision, best price/spread/verdict across the researched commodities, and directing the user to the interactive tab cards and visual charts above.
 
-4. FOR MANDI COMMODITY RATES:
-   • Call 'getMandiRates' with commodity and district/state in English.
-
-5. FOR CHARTS, MARKET GRAPHS & VISUAL COMPARISONS:
+5. FOR CHARTS, MARKET GRAPHS & VISUAL COMPARISONS (USE \`\`\`chart):
    • The app's markdown engine automatically converts fenced \`\`\`chart code blocks into rich, interactive Recharts charts on the user's screen!
    • Whenever the user asks for a graph, chart, price distribution, or visual comparison, you MUST output a valid \`\`\`chart JSON block:
      \`\`\`chart
      {
-       "type": "bar",
-       "title": "Onion Rate Analysis - Indore APMC",
+       "chartType": "bar",
+       "title": "APMC Modal Prices by Market Yard (₹/Quintal)",
+       "unit": "₹",
        "data": [
-         { "name": "Super Premium (A-Grade)", "rate": 15900 },
-         { "name": "Modal Average (FAQ)", "rate": 8450 },
-         { "name": "Medium Quality (B-Grade)", "rate": 5200 },
-         { "name": "Local / Chharrhi (C-Grade)", "rate": 1000 }
+         { "name": "Guntur APMC", "price": 1850 },
+         { "name": "Kurnool APMC", "price": 1550 },
+         { "name": "Lasalgaon APMC", "price": 1420 },
+         { "name": "Indore APMC", "price": 2480 },
+         { "name": "Khandwa APMC", "price": 2450 }
+       ],
+       "xKey": "name",
+       "series": [
+         { "key": "price", "name": "Modal Price (₹/Qtl)", "color": "#10b981" }
        ]
      }
      \`\`\`
    • Supported chart types: "bar", "line", "area", "pie".
-   • Embed this \`\`\`chart block inside 'stageDocument' or directly in your response markdown.
+   • CRITICAL RULE: NEVER use Mermaid for charts or numeric bar graphs! Mermaid xychart is strictly forbidden. ALWAYS use \`\`\`chart.
    • STRICT PROHIBITION: NEVER generate ASCII or Unicode progress bars like "[██████████] 53%" in text! Always use the interactive \`\`\`chart block!
 
-6. FOR BUDGETS / EXPENSES:
-   • Call 'stageBudget' or 'stageExpense' with realistic breakdown.
+5B. FOR WORKFLOWS, PIPELINES, DECISION TREES & ARCHITECTURE (USE \`\`\`mermaid):
+   • Whenever the user asks for a workflow, process lifecycle, supply chain diagram, or approval steps, use Mermaid ('graph TD', 'graph LR', or 'sequenceDiagram').
+   • Example:
+     \`\`\`mermaid
+     graph LR
+         A[Loan Application Submitted] --> B{KYC & Document Verification}
+         B -->|Approved| C[Branch Manager Sanction]
+         B -->|Deficiency| D[Clarification Requested]
+         C --> E[Account Disbursement]
+     \`\`\`
+   • Mermaid is ONLY for workflows, pipelines, and decision trees.
 
-7. FOR COMPETITORS & CATCHMENT MAP RADAR:
-   • Call 'scanCatchmentRadar' with category, location, and radiusKm. This pulls live Google Maps places via SerpApi and renders an interactive map on the user's screen.
+5C. FOR DYNAMIC CALCULATORS & KPI CARDS:
+   • Interactive financial simulator: Use \`\`\`calculator code blocks.
+     Example:
+     \`\`\`calculator
+     {
+       "title": "Inter-Mandi Transport Arbitrage Simulator",
+       "description": "Adjust freight distance and purchase rate to simulate net realized gain live",
+       "inputs": [
+         { "id": "sourceRate", "label": "Source Buy Rate", "type": "slider", "min": 1000, "max": 4000, "step": 50, "defaultValue": 1850, "unit": "₹" },
+         { "id": "targetRate", "label": "Target Sell Rate", "type": "slider", "min": 1500, "max": 5000, "step": 50, "defaultValue": 2480, "unit": "₹" },
+         { "id": "freightCost", "label": "Est. Freight / Qtl", "type": "slider", "min": 50, "max": 500, "step": 10, "defaultValue": 180, "unit": "₹" }
+       ],
+       "outputs": [
+         { "label": "Gross Arbitrage Spread", "formula": "targetRate - sourceRate", "format": "currency" },
+         { "label": "Net Realized Profit", "formula": "targetRate - sourceRate - freightCost", "format": "currency", "highlight": true }
+       ]
+     }
+     \`\`\`
+   • Executive summary metric pills: Use \`\`\`cards JSON blocks.
+     Example:
+     \`\`\`cards
+     {
+       "title": "Mandi Rate & Arbitrage Highlights",
+       "cards": [
+         { "label": "Top Realization Yard", "value": "₹2,480/qtl", "status": "positive", "subtext": "Indore APMC" },
+         { "label": "Max Net Gain", "value": "+₹450/qtl", "status": "positive", "subtext": "After freight deduction" },
+         { "label": "Market Trend", "value": "Bullish", "status": "neutral", "subtext": "Arrivals down 12%" }
+       ]
+     }
+     \`\`\`
 
-8. FOR MANDI ARBITRAGE & APMC RATES:
-   • Call 'getMandiArbitrage' (or 'getMandiRates') with commodity and district/state. This computes live APMC yard price spreads and transport viability.
+5. LOCAL COMPETITOR & OUTLET COORDINATES (USE \`\`\`map):
+   When scanning specific geographical locations or competitor clusters, emit a Leaflet map spec with coordinates.
 
-9. FOR SWOT STRATEGIC ANALYSIS:
-   • Call 'runSWOTScan' with category and location. This builds a 4-quadrant SWOT matrix grounded in local competitor density.
-
-10. FOR GOVERNMENT SUBSIDIES & MSME SCHEMES:
-   • Call 'evaluateGovtSchemes' with businessSector and investmentAmount to match Mudra, PMEGP, PM SVANidhi, and CGTMSE options.
-
-11. FOR LOAN EMI & COMMERCIAL BANK RATES:
-   • Call 'evaluateCreditAndEMI' with amount, tenureYears, and interestRate to compare real bank rates and repayment schedules.
-
-12. GENERAL RESEARCH & SEARCH INQUIRIES:
-   • When the user asks to search the web or research information:
-   • Call 'webSearch' to fetch authentic, verified details.
-   • If the search results warrant an official table or form, call 'stageDocument' or 'stageForm' to display it on screen simultaneously.
-
-13. FOR NORMAL CHATS & GENERAL DIALOGUE:
-   • If the user is just saying hello, asking a clarifying question, or engaging in general discussion WITHOUT asking for market intelligence, forms, or documents:
-   • DO NOT CALL ANY TOOLS! Reply directly in a friendly, conversational sentence. Staging is strictly for structured data, subagent intelligence, and official documents!
+6. STRUCTURED COMPARISONS & INVENTORIES:
+   Use standard GitHub-Flavored Markdown tables (| Col 1 | Col 2 |).
 
 CRITICAL POST-TOOL CONTENT SUMMARY RULE (MANDATORY 15 TO 25 WORDS MAXIMUM — ZERO FLUFF, 1-SECOND BURST):
-- Once you call a subagent or staging tool ('scanCatchmentRadar', 'getMandiArbitrage', 'runSWOTScan', 'evaluateGovtSchemes', 'evaluateCreditAndEMI', 'stageForm', 'stageDocument'):
+- Once you call a subagent or staging tool ('scanCatchmentRadar', 'getMandiArbitrage', 'runSWOTScan', 'evaluateGovtSchemes', 'evaluateCreditAndEMI', 'runCustomResearchAgent', 'getOndcIntelligence', 'predictDistrictBusinesses', 'stageForm', 'stageDocument'):
 - The visual interface and map are ALREADY rendered directly on the user's screen!
 - Your final text response MUST be ONLY 1 single crisp spoken summary sentence (15 to 25 words maximum) stating the key takeaway (e.g. "I found 8 competitor shops on Google Maps near Indiranagar with an average 4.2 rating." or "मैंने इंदौर मंडी में प्याज के भाव और तुलनात्मक चार्ट स्क्रीन पर तैयार कर दिया है।").
 - NEVER output generic hollow sentences or multi-paragraph outlines. Keep it under 25 words so the live voice agent can speak it immediately!
@@ -362,9 +416,6 @@ STRICT REGULATORY, SAFETY & PROHIBITED COMMERCE POLICY (MANDATORY):
         const STAGE_TOOLS = new Set([
           "stageForm",
           "stageDocument",
-          "stageChart",
-          "stageBudget",
-          "stageExpense",
         ]);
 
         const SUBAGENT_TOOLS = new Set([
@@ -376,6 +427,7 @@ STRICT REGULATORY, SAFETY & PROHIBITED COMMERCE POLICY (MANDATORY):
           "evaluateCreditAndEMI",
           "getOndcIntelligence",
           "predictDistrictBusinesses",
+          "runCustomResearchAgent",
         ]);
 
         const stripCharts = (s: string) =>
@@ -520,8 +572,12 @@ STRICT REGULATORY, SAFETY & PROHIBITED COMMERCE POLICY (MANDATORY):
               const invocationRecord = {
                 toolCallId,
                 toolName: name,
+                icon: def.icon || "bot",
                 args: toolArgs,
+                summary: finalSummary,
+                status: "completed",
                 result: toolOut,
+                completedAt: Date.now(),
               };
               executedToolCalls.push(invocationRecord);
 
@@ -584,21 +640,6 @@ STRICT REGULATORY, SAFETY & PROHIBITED COMMERCE POLICY (MANDATORY):
                   artifact: artifactPayload,
                 });
 
-                if (isSubagent) {
-                  finish(
-                    toolOut.spokenSummary ||
-                      toolOut.summary ||
-                      `${artifactPayload.title} is ready on screen.`,
-                  );
-                } else if (STAGE_TOOLS.has(name) && toolOut?.isArtifact) {
-                  const body =
-                    typeof toolOut.data?.content === "string"
-                      ? stripCharts(toolOut.data.content).slice(0, 200)
-                      : "";
-                  finish(
-                    `${toolOut.title || "Item"} is ready on screen. ${toolOut.summary || ""} ${body}`.trim(),
-                  );
-                }
               }
 
               return toolOut;
@@ -612,7 +653,12 @@ STRICT REGULATORY, SAFETY & PROHIBITED COMMERCE POLICY (MANDATORY):
             system: systemInstruction,
             messages: [...chatHistoryMessages, { role: "user", content: userParts }],
             tools: wrappedTools as any,
-            stopWhen: isStepCount(5),
+            stopWhen: isStepCount(6),
+            providerOptions: {
+              vertex: {
+                streamFunctionCallArguments: true,
+              },
+            },
             abortSignal: abort.signal,
           });
 
@@ -651,8 +697,13 @@ STRICT REGULATORY, SAFETY & PROHIBITED COMMERCE POLICY (MANDATORY):
               ? "मैंने आपका अनुरोध प्रोसेस कर दिया है और परिणाम स्क्रीन पर तैयार कर दिया है।"
               : "I have processed your request and staged the details on your screen.";
 
+          const toolSpokenSummary = executedToolCalls
+            .map((tc) => tc.result?.spokenSummary || tc.result?.summary)
+            .filter(Boolean)
+            .join(". ");
+
           const finalAssistantText =
-            fullGeneratedText.trim() || defaultFallback;
+            fullGeneratedText.trim() || toolSpokenSummary || defaultFallback;
 
           if (!finished) {
             finish(finalAssistantText);

@@ -372,6 +372,18 @@ FEW-SHOT EXAMPLES:
   Client Ingestion: [TOOL RESULT] इंदौर APMC में प्याज का मॉडल भाव ₹2,200 प्रति क्विंटल है। (Screen now shows: इंदौर मंडी प्याज रिपोर्ट)
   Final Spoken Response: "इंदौर मंडी में प्याज का मॉडल भाव 2200 रुपये प्रति क्विंटल है, और मैंने स्क्रीन पर चार्ट तैयार कर दिया है।"
 
+• Example 2C (Workflow / Flowchart Diagram Inquiry — Two-Phase Confirmation & Tool Execution):
+  Turn 1:
+  User: "Show me a flowchart for Mudra loan application steps"
+  Spoken Response: "Shall I generate a step-by-step workflow diagram for the Mudra loan application on your screen?"
+  Turn 2:
+  User: "Yes please"
+  Tool Call: triggerScreenAction({ spokenAnnouncement: "I'm generating the Mudra loan workflow diagram on your screen.", query: "Generate a step-by-step Mermaid flowchart diagram for the Mudra loan application and approval process.", captureImage: false })
+  Tool Ack: { status: "executing" }
+  Spoken Announcement: "I'm generating the Mudra loan workflow diagram on your screen."
+  Client Ingestion: [TOOL RESULT] Staged Mudra loan approval workflow flowchart. (Screen now shows: Mudra Loan Process Flowchart)
+  Final Spoken Response: "I have displayed the full Mudra loan approval workflow diagram on your screen. You can review the stages or tap to expand."
+
 • Example 3 (Convert / Digitize Document from Camera View — Two-Phase Confirmation & Tool Execution):
   Turn 1:
   User: "Digitize the loan application form visible on camera"
@@ -445,7 +457,7 @@ REFUSAL DIRECTIVE (ZERO TOOLS, DIGNIFIED DEFLECTION):
           {
             name: "triggerScreenAction",
             description:
-              "UNIVERSAL WORKSPACE, VISION & SCREEN ACTION TOOL. You MUST call this tool immediately whenever the user requests ANY operational task: (1) Scanning, converting, or digitizing a document, paper, passbook, or screen shown on camera into an interactive digital form; (2) Inspecting, reading, or auditing anything shown via camera; (3) Setting, updating, or editing any field/value in an active on-screen form; (4) Generating a new digital form, scheme application, table, or chart from scratch; (5) Retrieving live APMC mandi rates, commodity trends, or government schemes (Mudra, SVANidhi, PMEGP). CRITICAL: If the user is showing something on camera, include what is visible on camera in the 'query' so the autonomous vision sub-agent can capture it. Do NOT verbally promise to do it without emitting this tool call.",
+              "UNIVERSAL WORKSPACE, VISION & SCREEN ACTION TOOL. You MUST call this tool immediately whenever the user requests ANY operational task: (1) Scanning, converting, or digitizing a document, paper, passbook, or screen shown on camera into an interactive digital form; (2) Inspecting, reading, or auditing anything shown via camera; (3) Setting, updating, or editing any field/value in an active on-screen form; (4) Generating a new digital form, scheme application, table, comparison chart, workflow flowchart, or process diagram from scratch; (5) Retrieving live APMC mandi rates, commodity trends, or government schemes (Mudra, SVANidhi, PMEGP). CRITICAL: If the user is showing something on camera, include what is visible on camera in the 'query' so the autonomous vision sub-agent can capture it. Do NOT verbally promise to do it without emitting this tool call.",
             parameters: {
               type: "OBJECT",
               properties: {

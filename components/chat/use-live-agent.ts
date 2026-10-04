@@ -1272,7 +1272,17 @@ export function useLiveAgent(options: LiveAgentOptions = {}) {
                             ? "stageBudget"
                             : art.artifactType === "expense"
                               ? "stageExpense"
-                              : "stageForm";
+                              : art.artifactType === "swarm_dossier" || art.artifactType === "mandi_arbitrage" || art.artifactType === "mandi"
+                                ? "getMandiArbitrage"
+                                : art.artifactType === "catchment_radar" || art.artifactType === "competitors"
+                                  ? "scanCatchmentRadar"
+                                  : art.artifactType === "govt_schemes" || art.artifactType === "schemes"
+                                    ? "evaluateGovtSchemes"
+                                    : art.artifactType === "emi_calculator" || art.artifactType === "credit"
+                                      ? "evaluateCreditAndEMI"
+                                      : art.artifactType === "swot_matrix" || art.artifactType === "swot"
+                                        ? "runSWOTScan"
+                                        : "stageForm";
 
                     // Prepend into sessionCompletedTasks (latest first)
                     const compItem: CompletedTaskItem = {

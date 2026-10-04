@@ -82,22 +82,42 @@ interface AwakenedDomain {
 }
 
 export function SwarmTabsCard({ toolCalls = [], onOpenArtifact, isStreaming = false }: SwarmTabsCardProps) {
-  // Only display tabs when the agent has ACTUALLY started streaming content out or has completed
-  const completedCalls = toolCalls
-    .filter((tc) => {
-      const res = (tc.result || {}) as any;
-      const content = res?.content || res?.data?.content || res?.markdown || "";
-      if (tc.status === "completed") {
-        return Boolean(tc.result);
-      }
-      return typeof content === "string" && content.trim().length > 0;
-    });
+  const SUBAGENT_TOOLS = new Set([
+    "runSWOTScan",
+    "evaluateGovtSchemes",
+    "getMandiArbitrage",
+    "getMandiRates",
+    "scanCatchmentRadar",
+    "searchCompetitors",
+    "evaluateCreditAndEMI",
+    "getOndcIntelligence",
+    "predictDistrictBusinesses",
+    "runCustomResearchAgent",
+  ]);
 
-  if (completedCalls.length === 0) return null;
+  // NEVER show premature empty tabs! Only display once streaming content has actually started or when result is present
+  const activeStreamCalls = toolCalls.filter((tc) => {
+    const isSubagent =
+      SUBAGENT_TOOLS.has(tc.toolName) ||
+      tc.toolName?.startsWith("runCustom") ||
+      Boolean((tc.result as any)?.isCustomSubAgent) ||
+      Boolean((tc.result as any)?.isArtifact && (tc.result as any)?.tabTitle);
+
+    if (!isSubagent) return false;
+
+    const res = (tc.result || {}) as any;
+    const content = res?.content || res?.data?.content || res?.markdown || "";
+    const hasStreamingContent = typeof content === "string" && content.trim().length > 0;
+    const hasCompletedResult = Boolean(tc.result && typeof tc.result === "object" && Object.keys(tc.result).length > 0);
+
+    return hasStreamingContent || hasCompletedResult;
+  });
+
+  if (activeStreamCalls.length === 0) return null;
 
   return (
     <SwarmTabsCardInner
-      completedCalls={completedCalls}
+      completedCalls={activeStreamCalls}
       toolCalls={toolCalls}
       onOpenArtifact={onOpenArtifact}
       isStreaming={isStreaming}

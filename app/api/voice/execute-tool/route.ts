@@ -147,7 +147,8 @@ ${args.audioBase64 ? "IMPORTANT: The user's authentic spoken audio for this turn
 CRITICAL TASK:
 You MUST invoke the appropriate tool with complete, authentic, professional Indian MSME / banking / trade fields:
 - If stageForm: Build complete, real-world sections matching the user's requested bank or scheme (1. Personal & KYC Details; 2. Enterprise Details; 3. Banking & Loan Requirement with Bank Name, Branch IFSC, Account No, Amount; 4. Statutory Declaration).
-- If getMandiRates: Call getMandiRates with the commodity and district/state in English.
+- If getMandiArbitrage or Mandi rates: Call getMandiArbitrage with the commodity and district/state in English.
+- If stageDocument: Use rich GitHub-Flavored Markdown with tables, \`\`\`chart for numerical comparisons, and \`\`\`mermaid for workflow/process diagrams. Never use ASCII progress bars or mermaid xychart.
 - If stageChart: Provide at least 5-6 realistic monthly or category data points, suitable xAxisKey, and series.
 - If stageBudget: Provide realistic category allocations summing to the budget limit.
 - If stageExpense: Record expense with category and amount.

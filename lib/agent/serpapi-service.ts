@@ -69,7 +69,7 @@ export async function searchGoogleMaps(params: {
     return [];
   }
 
-  const { query, location, lat, lon, radiusKm, limit = 40, timeoutMs = 15000 } = params;
+  const { query, location, lat, lon, radiusKm, limit = 40, timeoutMs = 20000 } = params;
 
   let cleanLoc = location || "";
   if (cleanLoc.includes(",")) {
@@ -186,7 +186,7 @@ export async function searchCatchmentShops(params: {
     lon,
     radiusKm,
     limit,
-    timeoutMs: 15000,
+    timeoutMs: 20000,
   });
 
   const calculateDist = (lat1: number, lon1: number, lat2: number, lon2: number) => {
@@ -247,6 +247,15 @@ export async function searchCatchmentShops(params: {
   });
 }
 
+interface SerpCacheEntry<T> {
+  timestamp: number;
+  data: T;
+}
+
+const serpWebCache = new Map<string, SerpCacheEntry<GoogleWebResult[]>>();
+const serpNewsCache = new Map<string, SerpCacheEntry<GoogleNewsResult[]>>();
+const SERP_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
 /**
  * Searches Google Organic Web Search via SerpApi.
  */
@@ -256,6 +265,12 @@ export async function searchGoogleWeb(
 ): Promise<GoogleWebResult[]> {
   const apiKey = process.env.SERPAPI_API_KEY;
   if (!apiKey) return [];
+
+  const cacheKey = `${query.toLowerCase().trim()}_${numResults}`;
+  const cached = serpWebCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < SERP_CACHE_TTL_MS) {
+    return cached.data;
+  }
 
   const url = new URL("https://serpapi.com/search.json");
   url.searchParams.set("engine", "google");
@@ -267,20 +282,23 @@ export async function searchGoogleWeb(
 
   try {
     const res = await fetch(url.toString(), {
-      signal: AbortSignal.timeout(9000),
+      signal: AbortSignal.timeout(20000),
     });
     if (!res.ok) return [];
 
     const data = await res.json();
     const organic = data?.organic_results || [];
 
-    return organic.slice(0, numResults).map(
+    const results = organic.slice(0, numResults).map(
       (r: any): GoogleWebResult => ({
         title: r.title || "Untitled",
         url: r.link || "",
         snippet: r.snippet || "",
       }),
     );
+
+    serpWebCache.set(cacheKey, { timestamp: Date.now(), data: results });
+    return results;
   } catch (err: any) {
     console.warn("[SerpApi Google Web error]:", err?.message);
     return [];
@@ -297,6 +315,12 @@ export async function searchGoogleNews(
   const apiKey = process.env.SERPAPI_API_KEY;
   if (!apiKey) return [];
 
+  const cacheKey = `${query.toLowerCase().trim()}_${numResults}`;
+  const cached = serpNewsCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < SERP_CACHE_TTL_MS) {
+    return cached.data;
+  }
+
   const url = new URL("https://serpapi.com/search.json");
   url.searchParams.set("engine", "google_news");
   url.searchParams.set("q", query);
@@ -306,14 +330,14 @@ export async function searchGoogleNews(
 
   try {
     const res = await fetch(url.toString(), {
-      signal: AbortSignal.timeout(9000),
+      signal: AbortSignal.timeout(20000),
     });
     if (!res.ok) return [];
 
     const data = await res.json();
     const news = data?.news_results || [];
 
-    return news.slice(0, numResults).map((n: any) => ({
+    const results = news.slice(0, numResults).map((n: any) => ({
       title: n.title || "",
       link: n.link || "",
       snippet: n.snippet || "",
@@ -321,6 +345,9 @@ export async function searchGoogleNews(
       source: n.source?.name || "",
       thumbnail: n.thumbnail || undefined,
     }));
+
+    serpNewsCache.set(cacheKey, { timestamp: Date.now(), data: results });
+    return results;
   } catch (err: any) {
     console.warn("[SerpApi Google News error]:", err?.message);
     return [];

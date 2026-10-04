@@ -104,7 +104,13 @@ export function ChatWorkspace({
   );
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [isSidebarOpen, setIsSidebarOpenRaw] = useState(() => getPersistedSidebarOpen());
+  const [isSidebarOpen, setIsSidebarOpenRaw] = useState(true);
+
+  // Sync persisted sidebar open state after initial client mount to avoid SSR hydration mismatch
+  useEffect(() => {
+    setIsSidebarOpenRaw(getPersistedSidebarOpen());
+  }, []);
+
   const setIsSidebarOpen = useCallback((open: boolean | ((prev: boolean) => boolean)) => {
     setIsSidebarOpenRaw((prev) => {
       const next = typeof open === "function" ? open(prev) : open;
@@ -1836,17 +1842,18 @@ function formatSmartChatTitle(rawText: string): string {
 
   // Derive artifact strictly scoped to the current active chat
   const currentChatArtifact = useMemo(() => {
-    // If user is on a brand new chat, NEVER leak old artifacts!
-    if (!activeChatId) return null;
-
-    // If an artifact was generated live in this voice turn, only show if it belongs to this active chat
+    // If an artifact was generated live in this voice turn, show it immediately
     if (
       liveAgent.liveArtifact &&
       (!liveAgent.liveArtifactChatId ||
+        !activeChatId ||
         liveAgent.liveArtifactChatId === activeChatId)
     ) {
       return liveAgent.liveArtifact;
     }
+
+    // If user is on a brand new chat, NEVER leak old artifacts!
+    if (!activeChatId) return null;
 
     // Otherwise, find the latest artifact from the CURRENT chat's messages
     if (activeChatId && messages.length > 0) {
@@ -1860,11 +1867,13 @@ function formatSmartChatTitle(rawText: string): string {
                 "scanCatchmentRadar",
                 "searchCompetitors",
                 "getMandiArbitrage",
+                "getMandiRates",
                 "runSWOTScan",
                 "evaluateGovtSchemes",
                 "evaluateCreditAndEMI",
                 "getOndcIntelligence",
                 "predictDistrictBusinesses",
+                "runCustomResearchAgent",
               ].includes(tc.toolName) && tc.result
             );
 
