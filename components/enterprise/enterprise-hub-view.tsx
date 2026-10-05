@@ -621,7 +621,7 @@ export function EnterpriseHubView({
   const creditData = intelligence?.credit || null;
 
   return (
-    <div className="flex-1 w-full h-full overflow-y-auto font-sans p-4 sm:p-6 lg:p-8 pt-20 md:pt-20">
+    <div className="flex-1 w-full h-full overflow-y-auto font-sans p-4 sm:p-6 pt-16 sm:pt-16 lg:pt-14 lg:px-8 lg:pb-8">
       <div className="max-w-6xl mx-auto space-y-6 pb-20">
         {/* ── Executive Header Banner ── */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-6 rounded-3xl bg-gradient-to-br from-white/80 via-white/40 to-mint-pale/40 dark:from-card dark:via-card/60 dark:to-muted/30 border border-sage/40 dark:border-border backdrop-blur-xl shadow-xs">
@@ -684,116 +684,122 @@ export function EnterpriseHubView({
           </div>
         </div>
 
-        {/* ── Enterprise Tab Navigation Bar ── */}
-        <div className="flex items-center gap-1.5 p-1.5 bg-cream/70 dark:bg-card/70 backdrop-blur-md rounded-2xl border border-sage/30 dark:border-border overflow-x-auto select-none">
-          <button
-            onClick={() => handleTabClick("overview")}
-            className={cn(
-              "flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap cursor-pointer",
-              activeTab === "overview"
-                ? "bg-white dark:bg-muted text-forest dark:text-mint shadow-xs font-bold"
-                : "text-muted-foreground hover:text-foreground hover:bg-white/40 dark:hover:bg-muted/40",
-            )}
-          >
-            <BarChart3 className="size-3.5" />
-            <span>📊 Overview &amp; Telemetry</span>
-          </button>
+        {/* ── Enterprise Tab Navigation (2-row grid) ── */}
+        <div className="flex flex-col gap-1.5 p-1.5 bg-cream/70 dark:bg-card/70 backdrop-blur-md rounded-2xl border border-sage/30 dark:border-border select-none">
+          {/* Row 1: 4 tabs */}
+          <div className="grid grid-cols-4 gap-1">
+            <button
+              onClick={() => handleTabClick("overview")}
+              className={cn(
+                "flex items-center justify-center gap-1.5 px-2 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap cursor-pointer",
+                activeTab === "overview"
+                  ? "bg-white dark:bg-muted text-forest dark:text-mint shadow-xs font-bold"
+                  : "text-muted-foreground hover:text-foreground hover:bg-white/40 dark:hover:bg-muted/40",
+              )}
+            >
+              <BarChart3 className="size-3.5 shrink-0" />
+              <span className="truncate">📊 Overview</span>
+            </button>
 
-          <button
-            onClick={() => handleTabClick("swot")}
-            className={cn(
-              "flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap cursor-pointer relative",
-              activeTab === "swot"
-                ? "bg-white dark:bg-muted text-forest dark:text-mint shadow-xs font-bold"
-                : "text-muted-foreground hover:text-foreground hover:bg-white/40 dark:hover:bg-muted/40",
-            )}
-          >
-            <Target className="size-3.5" />
-            <span>🎯 SWOT Strategic Radar</span>
-            {isDomainActive("swot") && (
-              <span className="size-1.5 rounded-full bg-mint animate-pulse" />
-            )}
-          </button>
+            <button
+              onClick={() => handleTabClick("swot")}
+              className={cn(
+                "flex items-center justify-center gap-1.5 px-2 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap cursor-pointer relative",
+                activeTab === "swot"
+                  ? "bg-white dark:bg-muted text-forest dark:text-mint shadow-xs font-bold"
+                  : "text-muted-foreground hover:text-foreground hover:bg-white/40 dark:hover:bg-muted/40",
+              )}
+            >
+              <Target className="size-3.5 shrink-0" />
+              <span className="truncate">🎯 SWOT Radar</span>
+              {isDomainActive("swot") && (
+                <span className="size-1.5 rounded-full bg-mint animate-pulse absolute top-1.5 right-1.5" />
+              )}
+            </button>
 
-          <button
-            onClick={() => handleTabClick("schemes")}
-            className={cn(
-              "flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap cursor-pointer",
-              activeTab === "schemes"
-                ? "bg-white dark:bg-muted text-forest dark:text-mint shadow-xs font-bold"
-                : "text-muted-foreground hover:text-foreground hover:bg-white/40 dark:hover:bg-muted/40",
-            )}
-          >
-            <Landmark className="size-3.5" />
-            <span>🏛️ Govt Schemes &amp; Subsidies</span>
-            {isDomainActive("schemes") && (
-              <span className="size-1.5 rounded-full bg-mint animate-pulse" />
-            )}
-          </button>
+            <button
+              onClick={() => handleTabClick("schemes")}
+              className={cn(
+                "flex items-center justify-center gap-1.5 px-2 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap cursor-pointer",
+                activeTab === "schemes"
+                  ? "bg-white dark:bg-muted text-forest dark:text-mint shadow-xs font-bold"
+                  : "text-muted-foreground hover:text-foreground hover:bg-white/40 dark:hover:bg-muted/40",
+              )}
+            >
+              <Landmark className="size-3.5 shrink-0" />
+              <span className="truncate">🏛️ Govt Schemes</span>
+              {isDomainActive("schemes") && (
+                <span className="size-1.5 rounded-full bg-mint animate-pulse" />
+              )}
+            </button>
 
-          <button
-            onClick={() => handleTabClick("mandi")}
-            className={cn(
-              "flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap cursor-pointer",
-              activeTab === "mandi"
-                ? "bg-white dark:bg-muted text-forest dark:text-mint shadow-xs font-bold"
-                : "text-muted-foreground hover:text-foreground hover:bg-white/40 dark:hover:bg-muted/40",
-            )}
-          >
-            <Coins className="size-3.5" />
-            <span>🌾 Mandi &amp; Arbitrage</span>
-            {isDomainActive("mandi") && (
-              <span className="size-1.5 rounded-full bg-mint animate-pulse" />
-            )}
-          </button>
+            <button
+              onClick={() => handleTabClick("mandi")}
+              className={cn(
+                "flex items-center justify-center gap-1.5 px-2 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap cursor-pointer",
+                activeTab === "mandi"
+                  ? "bg-white dark:bg-muted text-forest dark:text-mint shadow-xs font-bold"
+                  : "text-muted-foreground hover:text-foreground hover:bg-white/40 dark:hover:bg-muted/40",
+              )}
+            >
+              <Coins className="size-3.5 shrink-0" />
+              <span className="truncate">🌾 Mandi & Arbitrage</span>
+              {isDomainActive("mandi") && (
+                <span className="size-1.5 rounded-full bg-mint animate-pulse" />
+              )}
+            </button>
+          </div>
 
-          <button
-            onClick={() => handleTabClick("competitors")}
-            className={cn(
-              "flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap cursor-pointer",
-              activeTab === "competitors"
-                ? "bg-white dark:bg-muted text-forest dark:text-mint shadow-xs font-bold"
-                : "text-muted-foreground hover:text-foreground hover:bg-white/40 dark:hover:bg-muted/40",
-            )}
-          >
-            <Store className="size-3.5" />
-            <span>🏪 Competitor Radar</span>
-            {isDomainActive("competitors") && (
-              <span className="size-1.5 rounded-full bg-mint animate-pulse" />
-            )}
-          </button>
+          {/* Row 2: 3 tabs centered */}
+          <div className="grid grid-cols-3 gap-1">
+            <button
+              onClick={() => handleTabClick("competitors")}
+              className={cn(
+                "flex items-center justify-center gap-1.5 px-2 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap cursor-pointer",
+                activeTab === "competitors"
+                  ? "bg-white dark:bg-muted text-forest dark:text-mint shadow-xs font-bold"
+                  : "text-muted-foreground hover:text-foreground hover:bg-white/40 dark:hover:bg-muted/40",
+              )}
+            >
+              <Store className="size-3.5 shrink-0" />
+              <span className="truncate">🏪 Competitor Radar</span>
+              {isDomainActive("competitors") && (
+                <span className="size-1.5 rounded-full bg-mint animate-pulse" />
+              )}
+            </button>
 
-          <button
-            onClick={() => handleTabClick("credit")}
-            className={cn(
-              "flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap cursor-pointer",
-              activeTab === "credit"
-                ? "bg-white dark:bg-muted text-forest dark:text-mint shadow-xs font-bold"
-                : "text-muted-foreground hover:text-foreground hover:bg-white/40 dark:hover:bg-muted/40",
-            )}
-          >
-            <CreditCard className="size-3.5" />
-            <span>💳 Credit &amp; Borrowing</span>
-            {isDomainActive("credit") && (
-              <span className="size-1.5 rounded-full bg-mint animate-pulse" />
-            )}
-          </button>
+            <button
+              onClick={() => handleTabClick("credit")}
+              className={cn(
+                "flex items-center justify-center gap-1.5 px-2 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap cursor-pointer",
+                activeTab === "credit"
+                  ? "bg-white dark:bg-muted text-forest dark:text-mint shadow-xs font-bold"
+                  : "text-muted-foreground hover:text-foreground hover:bg-white/40 dark:hover:bg-muted/40",
+              )}
+            >
+              <CreditCard className="size-3.5 shrink-0" />
+              <span className="truncate">💳 Credit & Borrowing</span>
+              {isDomainActive("credit") && (
+                <span className="size-1.5 rounded-full bg-mint animate-pulse" />
+              )}
+            </button>
 
-          <button
-            onClick={() => handleTabClick("custom")}
-            className={cn(
-              "flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap cursor-pointer",
-              activeTab === "custom"
-                ? "bg-white dark:bg-muted text-forest dark:text-mint shadow-xs font-bold"
-                : "text-muted-foreground hover:text-foreground hover:bg-white/40 dark:hover:bg-muted/40",
-            )}
-          >
-            <Bot className="size-3.5" />
-            <span>🔬 Specialized Research</span>
-            {isDomainActive("custom") && (
-              <span className="size-1.5 rounded-full bg-mint animate-pulse" />
-            )}
-          </button>
+            <button
+              onClick={() => handleTabClick("custom")}
+              className={cn(
+                "flex items-center justify-center gap-1.5 px-2 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap cursor-pointer",
+                activeTab === "custom"
+                  ? "bg-white dark:bg-muted text-forest dark:text-mint shadow-xs font-bold"
+                  : "text-muted-foreground hover:text-foreground hover:bg-white/40 dark:hover:bg-muted/40",
+              )}
+            >
+              <Bot className="size-3.5 shrink-0" />
+              <span className="truncate">🔬 Specialized Research</span>
+              {isDomainActive("custom") && (
+                <span className="size-1.5 rounded-full bg-mint animate-pulse" />
+              )}
+            </button>
+          </div>
         </div>
 
         {/* ── TAB 1: EXECUTIVE OVERVIEW & FINANCIAL TELEMETRY ── */}
