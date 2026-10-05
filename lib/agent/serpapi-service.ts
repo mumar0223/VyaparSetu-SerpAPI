@@ -203,27 +203,48 @@ export async function searchCatchmentShops(params: {
     return R * c;
   };
 
-  const valid = places
-    .filter(
-      (p) =>
-        typeof p.latitude === "number" &&
-        typeof p.longitude === "number" &&
-        !isNaN(p.latitude) &&
-        !isNaN(p.longitude)
-    )
-    .filter((p) => {
-      if (lat && lon && p.latitude && p.longitude) {
-        const d = calculateDist(lat, lon, p.latitude, p.longitude);
-        return d <= radiusKm * 1.35;
-      }
-      return true;
+  const validCoordPlaces = places.filter(
+    (p) =>
+      typeof p.latitude === "number" &&
+      typeof p.longitude === "number" &&
+      !isNaN(p.latitude) &&
+      !isNaN(p.longitude)
+  );
+
+  let valid = validCoordPlaces;
+  if (lat && lon && validCoordPlaces.length > 0) {
+    const nearby = validCoordPlaces.filter((p) => {
+      const d = calculateDist(lat, lon, p.latitude!, p.longitude!);
+      return d <= radiusKm * 1.5;
     });
+    // Only use strict lat/lon filter if it retains shops; if user searched a distinct city/area, retain the places found there!
+    if (nearby.length >= Math.min(3, validCoordPlaces.length)) {
+      valid = nearby;
+    }
+  }
+
+  // Calculate reference point for relative distance: use lat/lon if nearby, otherwise shop cluster centroid
+  const centroidLat =
+    valid.length > 0
+      ? valid.reduce((sum, p) => sum + (p.latitude || 0), 0) / valid.length
+      : lat;
+  const centroidLon =
+    valid.length > 0
+      ? valid.reduce((sum, p) => sum + (p.longitude || 0), 0) / valid.length
+      : lon;
+
+  const refLat = lat && lon && centroidLat && centroidLon && calculateDist(lat, lon, centroidLat, centroidLon) <= radiusKm * 1.5
+    ? lat
+    : centroidLat;
+  const refLon = lat && lon && centroidLat && centroidLon && calculateDist(lat, lon, centroidLat, centroidLon) <= radiusKm * 1.5
+    ? lon
+    : centroidLon;
 
   return valid.map((p) => {
     let distStr = "Within catchment";
     let distKm = 0;
-    if (lat && lon && p.latitude && p.longitude) {
-      const d = calculateDist(lat, lon, p.latitude, p.longitude);
+    if (refLat && refLon && p.latitude && p.longitude) {
+      const d = calculateDist(refLat, refLon, p.latitude, p.longitude);
       distKm = d;
       distStr = d < 1 ? `${Math.round(d * 1000)}m` : `${d.toFixed(1)}km`;
     }

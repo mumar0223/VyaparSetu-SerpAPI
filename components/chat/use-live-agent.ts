@@ -1564,9 +1564,13 @@ export function useLiveAgent(options: LiveAgentOptions = {}) {
         const audioBase64 = recorderRef.current?.getLastTurnWavBase64() || undefined;
 
         if (call.name === "triggerScreenAction" || call.name === "captureDocument") {
-          const announcement =
-            String(call.args?.spokenAnnouncement || "").trim() ||
-            "Main aapka kaam shuru kar raha hoon.";
+          let announcement = String(call.args?.spokenAnnouncement || "").trim();
+          if (!announcement) {
+            announcement =
+              selectedLanguageRef.current?.startsWith("hi")
+                ? "मैं आपका काम शुरू कर रहा हूँ। तब तक आप मुझसे कुछ भी पूछ सकते हैं!"
+                : "I'm starting this on your screen now. In the meantime, feel free to ask me anything else!";
+          }
 
           // 1) ACK IMMEDIATELY so the model starts synthesizing audio now
           modelTurnDoneRef.current = false;
@@ -1581,7 +1585,7 @@ export function useLiveAgent(options: LiveAgentOptions = {}) {
                       response: {
                         output: {
                           status: "executing",
-                          instruction: `Say exactly this one sentence now, then stop and wait: "${announcement}"`,
+                          instruction: `Say this announcement to the user now: "${announcement}". While the background agent works, remain attentive and converse if the user asks anything.`,
                         },
                       },
                     },

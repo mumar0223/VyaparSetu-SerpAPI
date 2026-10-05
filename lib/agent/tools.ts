@@ -644,7 +644,6 @@ function makeEmitter(
   };
 }
 
-
 export function getAgentTools(ctx?: ToolContext) {
   const userId = ctx?.userId;
   const conversationId = ctx?.conversationId;
@@ -1073,7 +1072,7 @@ export function getAgentTools(ctx?: ToolContext) {
     // ─────────────────────────────────────────────────────────────
     webSearch: tool({
       description:
-        "Searches the live web via SerpApi Google Search for official bank loan application form layouts, MSME PDF fields, mandatory statutory disclosures, government credit schemes, trade circulars, and market regulations.",
+        "Searches live Google Web and Places via SerpApi. USE THIS for: quick factual lookups, single shop or business inquiries (e.g., 'Where is Photo Point?', 'Address/phone of ABC Studio', 'Owner of XYZ Traders'), local prices, trade news, and official bank loan guidelines. DO NOT awaken heavy multi-agent swarms or generate map radars for single-shop questions; use webSearch for fast, direct conversational answers without cards or tables.",
       inputSchema: WebSearchSchema,
       execute: async ({ query, numResults = 5 }) => {
         try {
@@ -1148,8 +1147,84 @@ export function getAgentTools(ctx?: ToolContext) {
         const highThreats = shops.filter(
           (s) => s.threatLevel === "High",
         ).length;
-        const centerLat = lat || shops[0]?.lat || 12.9716;
-        const centerLng = lon || shops[0]?.lng || 77.5946;
+
+        // Rank competitors: highest rating, then highest review count
+        const sortedShops = [...shops].sort(
+          (a, b) =>
+            (b.rating || 0) - (a.rating || 0) ||
+            (b.reviews || 0) - (a.reviews || 0),
+        );
+        const top5 = sortedShops.slice(0, 5);
+        const top5Spoken = top5
+          .map(
+            (s, idx) =>
+              `${idx + 1}. ${s.name}${s.rating ? ` (${s.rating}★)` : ""}${s.landmark && s.landmark !== "Local Area" && s.landmark !== "Catchment Area" ? ` near ${s.landmark}` : ""}`,
+          )
+          .join(", ");
+
+        const spokenSummary =
+          top5.length > 0
+            ? `Located ${shops.length} verified competitors for ${resolvedCategory} in ${result.locationSummary || location || "your catchment area"}. The top ${top5.length} are: ${top5Spoken}. The complete interactive map and radar are now on your screen.`
+            : (result.spokenSummary || `Located ${shops.length} verified competitors for ${resolvedCategory}.`);
+
+        // Calculate true geographic centroid of all verified competitor shops from SerpApi
+        const validCoords = shops.filter(
+          (s) =>
+            typeof s.lat === "number" &&
+            !isNaN(s.lat) &&
+            typeof s.lng === "number" &&
+            !isNaN(s.lng),
+        );
+        const centroidLat =
+          validCoords.length > 0
+            ? validCoords.reduce((sum, s) => sum + (s.lat ?? 0), 0) / validCoords.length
+            : undefined;
+        const centroidLng =
+          validCoords.length > 0
+            ? validCoords.reduce((sum, s) => sum + (s.lng ?? 0), 0) / validCoords.length
+            : undefined;
+
+        // Helper to check distance between user's profile lat/lon and shop centroid
+        const calcDistKm = (
+          lat1: number,
+          lon1: number,
+          lat2: number,
+          lon2: number,
+        ) => {
+          const R = 6371;
+          const dLat = ((lat2 - lat1) * Math.PI) / 180;
+          const dLon = ((lon2 - lon1) * Math.PI) / 180;
+          const a =
+            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos((lat1 * Math.PI) / 180) *
+              Math.cos((lat2 * Math.PI) / 180) *
+              Math.sin(dLon / 2) *
+              Math.sin(dLon / 2);
+          return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        };
+
+        let centerLat = centroidLat ?? lat ?? 12.9716;
+        let centerLng = centroidLng ?? lon ?? 77.5946;
+        let isHubNearby = false;
+
+        if (lat && lon) {
+          if (centroidLat !== undefined && centroidLng !== undefined) {
+            const dist = calcDistKm(lat, lon, centroidLat, centroidLng);
+            if (dist <= radiusKm * 1.5) {
+              centerLat = lat;
+              centerLng = lon;
+              isHubNearby = true;
+            } else {
+              centerLat = centroidLat;
+              centerLng = centroidLng;
+              isHubNearby = false;
+            }
+          } else {
+            centerLat = lat;
+            centerLng = lon;
+            isHubNearby = true;
+          }
+        }
 
         const content = `### 📍 Competitor Intelligence: ${resolvedCategory} (${result.locationSummary || location || "Catchment Zone"})
 
@@ -1193,7 +1268,7 @@ ${JSON.stringify(
     zoom: radiusKm <= 2 ? 15 : radiusKm <= 5 ? 14 : 13,
     radiusKm: radiusKm,
     markers: [
-      ...(lat && lon
+      ...(lat && lon && isHubNearby
         ? [
             {
               lat: lat,
@@ -1233,7 +1308,7 @@ ${shops.map((s) => `| **${s.name}** | ${s.distance} | ★ ${s.rating || "4.0"} (
         return {
           ...result,
           content,
-          spokenSummary: result.spokenSummary,
+          spokenSummary,
         };
       },
     }),
@@ -1881,11 +1956,93 @@ ${cards.map((c) => `**${c.title}**: ${c.whyInThisDistrict}\n- *Subsidy:* ${(c.ma
         const highThreats = shops.filter(
           (s) => s.threatLevel === "High",
         ).length;
-        const summary = `**Catchment Radar**: Located **${shops.length} verified commercial outlets** on Google Maps within **${params.radiusKm || 5}km** in ${params.location || "Catchment Area"}. Average customer rating is **${avgRating}★** with ${highThreats} high-threat competitors detected.`;
-        const spokenSummary = `Located ${shops.length} verified competitors for ${params.category} within ${params.radiusKm || 5} kilometers of ${params.location || "your location"}. The average customer rating is ${avgRating} stars with ${highThreats} high-threat outlets detected.`;
 
-        const centerLat = params.lat || shops[0]?.lat || 12.9716;
-        const centerLng = params.lon || shops[0]?.lng || 77.5946;
+        // Rank competitors: highest rating, then highest review count
+        const sortedShops = [...shops].sort(
+          (a, b) =>
+            (b.rating || 0) - (a.rating || 0) ||
+            (b.reviews || 0) - (a.reviews || 0),
+        );
+        const top5 = sortedShops.slice(0, 5);
+        const top5Spoken = top5
+          .map(
+            (s, idx) =>
+              `${idx + 1}. ${s.name}${s.rating ? ` (${s.rating}★)` : ""}${s.landmark && s.landmark !== "Local Area" && s.landmark !== "Catchment Area" ? ` near ${s.landmark}` : ""}`,
+          )
+          .join(", ");
+
+        const summary = `**Catchment Radar**: Located **${shops.length} verified commercial outlets** on Google Maps within **${params.radiusKm || 5}km** in ${params.location || "Catchment Area"}. Average customer rating is **${avgRating}★** with ${highThreats} high-threat competitors detected.`;
+        const spokenSummary =
+          top5.length > 0
+            ? `Located ${shops.length} verified competitors for ${params.category} in ${params.location || "your catchment area"}. The top ${top5.length} are: ${top5Spoken}. The complete interactive map and radar are now on your screen.`
+            : `Located ${shops.length} verified competitors for ${params.category} within ${params.radiusKm || 5} kilometers of ${params.location || "your location"}.`;
+
+        // Calculate true geographic centroid of all verified competitor shops from SerpApi
+        const validCoords = shops.filter(
+          (s) =>
+            typeof s.lat === "number" &&
+            !isNaN(s.lat) &&
+            typeof s.lng === "number" &&
+            !isNaN(s.lng),
+        );
+        const centroidLat =
+          validCoords.length > 0
+            ? validCoords.reduce((sum, s) => sum + (s.lat ?? 0), 0) / validCoords.length
+            : undefined;
+        const centroidLng =
+          validCoords.length > 0
+            ? validCoords.reduce((sum, s) => sum + (s.lng ?? 0), 0) / validCoords.length
+            : undefined;
+
+        // Helper to check distance between user's profile lat/lon and shop centroid
+        const calcDistKm = (
+          lat1: number,
+          lon1: number,
+          lat2: number,
+          lon2: number,
+        ) => {
+          const R = 6371;
+          const dLat = ((lat2 - lat1) * Math.PI) / 180;
+          const dLon = ((lon2 - lon1) * Math.PI) / 180;
+          const a =
+            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos((lat1 * Math.PI) / 180) *
+              Math.cos((lat2 * Math.PI) / 180) *
+              Math.sin(dLon / 2) *
+              Math.sin(dLon / 2);
+          return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        };
+
+        // Determine true center: if params.lat/lon is close to cluster (<= radius * 1.5), keep it.
+        // Otherwise, center the radar circle and map directly on the shops' centroid!
+        let centerLat = centroidLat ?? params.lat ?? 12.9716;
+        let centerLng = centroidLng ?? params.lon ?? 77.5946;
+        let isHubNearby = false;
+
+        if (params.lat && params.lon) {
+          if (centroidLat !== undefined && centroidLng !== undefined) {
+            const dist = calcDistKm(
+              params.lat,
+              params.lon,
+              centroidLat,
+              centroidLng,
+            );
+            if (dist <= (params.radiusKm || 5) * 1.5) {
+              centerLat = params.lat;
+              centerLng = params.lon;
+              isHubNearby = true;
+            } else {
+              // User searched an area separate from their profile; center radar on the shops
+              centerLat = centroidLat;
+              centerLng = centroidLng;
+              isHubNearby = false;
+            }
+          } else {
+            centerLat = params.lat;
+            centerLng = params.lon;
+            isHubNearby = true;
+          }
+        }
 
         const content = `### 📍 Catchment Competitor Radar: ${params.category} (${params.location || "Catchment Zone"})
 
@@ -1930,7 +2087,7 @@ ${JSON.stringify(
       (params.radiusKm || 5) <= 2 ? 15 : (params.radiusKm || 5) <= 5 ? 14 : 13,
     radiusKm: params.radiusKm || 5,
     markers: [
-      ...(params.lat && params.lon
+      ...(params.lat && params.lon && isHubNearby
         ? [
             {
               lat: params.lat,
@@ -2111,7 +2268,12 @@ ${shops.map((s) => `| **${s.name}** | ${s.distance} | ★ ${s.rating || "4.0"} (
       execute: async (params, context: any) => {
         const toolCallId =
           context?.toolCallId || context?.id || `call_${Date.now()}_custom`;
-        const em = makeEmitter(ctx, "runCustomResearchAgent", toolCallId, params);
+        const em = makeEmitter(
+          ctx,
+          "runCustomResearchAgent",
+          toolCallId,
+          params,
+        );
         const result = await runCustomResearchSubAgent(params, {
           onMarkdown: (md) => em.emit(stableMarkdown(md)),
         });

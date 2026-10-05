@@ -367,15 +367,27 @@ export function InteractiveMap({
         marker.on("mouseout", () => setHoveredPlaceName(null));
       });
 
-      // Fit bounds strictly to the catchment zone covered
-      if (shouldFitBounds && outerCircle) {
+      // Fit bounds to encompass both the catchment circle and plotted markers
+      if (shouldFitBounds) {
         try {
-          map.fitBounds(outerCircle.getBounds(), {
-            padding: [25, 25],
-            maxZoom: 15,
-            animate: false,
-          });
-          hasFittedInitialBoundsRef.current = true;
+          if (outerCircle && markersGroup && markersGroup.getLayers().length > 0) {
+            const groupBounds = L.featureGroup([outerCircle, markersGroup]).getBounds();
+            if (groupBounds.isValid()) {
+              map.fitBounds(groupBounds, {
+                padding: [30, 30],
+                maxZoom: 15,
+                animate: false,
+              });
+              hasFittedInitialBoundsRef.current = true;
+            }
+          } else if (outerCircle) {
+            map.fitBounds(outerCircle.getBounds(), {
+              padding: [25, 25],
+              maxZoom: 15,
+              animate: false,
+            });
+            hasFittedInitialBoundsRef.current = true;
+          }
         } catch (_) {}
       }
 
@@ -410,18 +422,35 @@ export function InteractiveMap({
     const map = mapInstanceRef.current;
     if (!map) return;
 
-    if (outerCircleRef.current) {
-      try {
-        map.fitBounds(outerCircleRef.current.getBounds(), {
-          padding: [25, 25],
-          maxZoom: 15,
-          animate: true,
-        });
-        return;
-      } catch (_) {}
+    if (outerCircleRef.current && markersGroupRef.current) {
+      import("leaflet").then((L) => {
+        try {
+          const groupBounds = L.featureGroup([
+            outerCircleRef.current,
+            markersGroupRef.current,
+          ]).getBounds();
+          if (groupBounds.isValid()) {
+            map.fitBounds(groupBounds, {
+              padding: [30, 30],
+              maxZoom: 15,
+              animate: true,
+            });
+            return;
+          }
+        } catch (_) {}
+        try {
+          map.fitBounds(outerCircleRef.current.getBounds(), {
+            padding: [25, 25],
+            maxZoom: 15,
+            animate: true,
+          });
+          return;
+        } catch (_) {}
+        map.setView(computedCenter, parsedSpec?.zoom || 14, { animate: true });
+      });
+    } else {
+      map.setView(computedCenter, parsedSpec?.zoom || 14, { animate: true });
     }
-
-    map.setView(computedCenter, parsedSpec?.zoom || 14, { animate: true });
   }, [computedCenter, parsedSpec?.zoom]);
 
   // ── 1. Initialize Leaflet Map ONCE on Mount & Immediately Draw All Layers ──
