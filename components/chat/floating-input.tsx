@@ -515,9 +515,12 @@ export function FloatingInput({
                 disabled={isLoading}
                 aria-label="Start live voice agent"
                 title={t("common.voiceAgent", "Voice Agent OS")}
-                className="size-8 rounded-full flex items-center justify-center bg-mint-pale dark:bg-mint/15 hover:bg-mint/25 text-forest dark:text-mint border border-mint/30 hover:border-mint/50 transition-all cursor-pointer shadow-xs hover:scale-105 active:scale-95"
+                className="h-8 px-2.5 sm:px-3 rounded-full flex items-center gap-1.5 bg-mint-pale dark:bg-mint/15 hover:bg-mint/25 text-forest dark:text-mint border border-mint/30 hover:border-mint/50 transition-all cursor-pointer shadow-xs active:scale-95 group"
               >
-                <AudioLines className="size-4" />
+                <AudioLines className="size-3.5 text-mint group-hover:scale-110 transition-transform animate-pulse" />
+                <span className="text-[11.5px] sm:text-[12px] font-semibold tracking-tight">
+                  {t("common.voiceAgent", "Voice Agent OS")}
+                </span>
               </button>
 
               {/* Send Button: Disabled during file upload */}

@@ -31,6 +31,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { ConversationSummary } from "./types";
 import { useTranslation } from "@/lib/i18n";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 interface HistorySidebarProps {
   conversations: ConversationSummary[];
@@ -239,7 +240,7 @@ export function HistorySidebar({
       </div>
 
       {/* Scrollable Conversation List */}
-      <div className="flex-1 overflow-y-auto px-2.5 py-1.5 space-y-4">
+      <div className="flex-1 overflow-y-auto sidebar-scrollbar px-2.5 py-1.5 space-y-4">
         {/* Pinned Section */}
         {pinnedChats.length > 0 && (
           <div>
@@ -304,6 +305,11 @@ export function HistorySidebar({
             </ul>
           )}
         </div>
+      </div>
+
+      {/* ── Sidebar Footer: Option 3 Sleek Theme Row Card with Switch ── */}
+      <div className="p-2.5 border-t border-sage/25 dark:border-border/80 bg-white/40 dark:bg-card/40 backdrop-blur-md flex items-center justify-center shrink-0">
+        <ThemeToggle variant="row" />
       </div>
     </div>
   );

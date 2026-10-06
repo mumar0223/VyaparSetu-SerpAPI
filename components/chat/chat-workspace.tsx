@@ -1971,9 +1971,6 @@ function formatSmartChatTitle(rawText: string): string {
         onOpenEnterprise={() => setActiveView("enterprise")}
       />
 
-      {/* ── Subtle Top Fade Shield (Softens scrolling content under floating controls) ── */}
-      <div className="pointer-events-none fixed top-0 inset-x-0 h-16 bg-gradient-to-b from-background/80 via-background/30 to-transparent z-30" />
-
       {/* ── Top-Left Floating Controls (When Sidebar is Collapsed) ── */}
       {!isSidebarOpen && (
         <div
