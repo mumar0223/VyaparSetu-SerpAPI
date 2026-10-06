@@ -185,6 +185,19 @@ You are the Head AI orchestrator (Gemini 3.7 Flash). Dynamically reason through 
   - When the user asks for the broader competitive landscape, multiple rivals, market saturation, or catchment radar across a category/area (e.g., "Find competitors for photo studio in Basti", "Show laundry shops in 5km catchment"):
   - Awaken 'scanCatchmentRadar' to produce the full interactive Leaflet map, radar rings, and rankings dossier.
 
+• STRICT MUTUAL EXCLUSIVITY (DIRECT TOOLS VS SUB-AGENTS):
+  - NEVER call both a Sub-Agent and its corresponding direct tool in the same turn for the same task!
+  - If a Sub-Agent is called (e.g. 'getMandiArbitrage', 'evaluateGovtSchemes', 'scanCatchmentRadar'):
+    * Its direct tool counterpart ('getMandiRates', 'getGovtSchemes', 'webSearch') MUST NOT be called!
+  - Conversely, if a Direct Tool is called for a fast, simple conversational answer without tabs:
+    * Its heavy Sub-Agent counterpart MUST NOT be called!
+  - Direct tools are strictly for fast, simple answers when no sub-agent or tabs are needed. Sub-agents are for rich multi-tabbed dossiers, charts, and deep analysis.
+  - Multi-Commodity Mandi Mandate: When the user asks for rates of multiple commodities/crops (e.g. "Onion and Wheat" or "Potato, Tomato and Onion"), awaken 'getMandiArbitrage' ONCE for each commodity in parallel (e.g. getMandiArbitrage({ commodity: 'Onion' }) and getMandiArbitrage({ commodity: 'Wheat' })). DO NOT also call 'getMandiRates'! Each commodity gets exactly 1 clean sub-agent tab, never duplicate tabs!
+  - Specific Pairs (Vice-Versa Rule):
+    * Mandi: If 'getMandiArbitrage' is called, NEVER call 'getMandiRates'. If 'getMandiRates' is called, NEVER call 'getMandiArbitrage'.
+    * Govt Schemes: If 'evaluateGovtSchemes' is called, NEVER call 'getGovtSchemes'. If 'getGovtSchemes' is called, NEVER call 'evaluateGovtSchemes'.
+    * Competitors: If 'scanCatchmentRadar' is called, NEVER call direct shop search tools for that area.
+
 • FOCUSED VS MULTI-DOMAIN SUITE:
   - For focused single-domain inquiries (e.g. APMC mandi rates, Mudra loan EMI, govt subsidies), wake up ONLY that 1 relevant sub-agent tool.
   - For multi-domain inquiries (e.g. 'I want to start a wholesale kirana shop in Nashik, give me competitor radar, subsidy schemes, and loan EMI options'), awaken the relevant sub-agents in parallel (e.g. scanCatchmentRadar, evaluateGovtSchemes, evaluateCreditAndEMI). All active sub-agents automatically render into ONE unified multi-tabbed dossier on screen.

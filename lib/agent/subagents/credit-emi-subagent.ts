@@ -75,11 +75,19 @@ export function calculateEMI(principal: number, annualRate: number, months: numb
   };
 }
 
-const CreditOutputSchema = z.object({
-  markdown: z.string().describe("Comprehensive Markdown credit intelligence dossier with underwriting brief, ```cards, ```calculator simulator, bank rate comparison table, amortization preview, and strategic advice"),
-  summary: z.string().describe("1-2 sentence executive summary for chat pill"),
-  spokenSummary: z.string().describe("1 concise sentence suitable for text-to-speech audio feedback"),
-});
+const CreditOutputSchema = z
+  .object({
+    markdown: z
+      .string()
+      .describe(
+        "Comprehensive Markdown credit intelligence dossier with underwriting brief, ```cards, ```calculator simulator, bank rate comparison table, amortization preview, and strategic advice",
+      ),
+    summary: z.string().describe("1-2 sentence executive summary for chat pill"),
+    spokenSummary: z
+      .string()
+      .describe("1 concise sentence suitable for text-to-speech audio feedback"),
+  })
+  .passthrough();
 
 /**
  * Autonomous Sub-Agent for Credit, Loan & EMI Evaluation.
@@ -93,7 +101,12 @@ export async function runCreditEMISubAgent(
     tenureYears?: number;
     interestRate?: number;
     monthlyRevenue?: number;
+    existingMonthlyEmi?: number;
     purpose?: string;
+    creditScoreCategory?: string;
+    collateralAvailable?: string;
+    lenderPreference?: string;
+    subventionEligible?: boolean;
   },
   opts?: {
     onMarkdown?: (md: string) => void;
@@ -112,7 +125,8 @@ export async function runCreditEMISubAgent(
   const bankComparisons = await fetchLiveBankLendingRates(principal <= 1000000 ? "mudra" : "msme");
 
   const monthlyRevenue = params.monthlyRevenue || (principal * 0.4);
-  const debtRatio = ((monthlyEMI / monthlyRevenue) * 100).toFixed(1);
+  const totalMonthlyDebtObligation = monthlyEMI + (params.existingMonthlyEmi || 0);
+  const debtRatio = ((totalMonthlyDebtObligation / monthlyRevenue) * 100).toFixed(1);
 
   const model = getLanguageModel(
     DASHBOARD_CHAT_CONFIG.provider,
@@ -126,10 +140,16 @@ Requested Tenure: ${years} Years (${months} Months)
 Benchmark Interest Rate: ${rate}% p.a.
 Purpose: "${purpose}"
 Estimated Monthly Revenue: ₹${monthlyRevenue.toLocaleString("en-IN")}
+Existing Monthly EMI Liabilities: ₹${(params.existingMonthlyEmi || 0).toLocaleString("en-IN")}/month
+Total Monthly Debt Service (New + Existing): ₹${totalMonthlyDebtObligation.toLocaleString("en-IN")}
+Fixed Obligation to Income Ratio (FOIR): ${debtRatio}% of monthly turnover (Safe banking norm: < 50%)
+Credit Score Tier: ${params.creditScoreCategory || "Standard Profile (700+)"}
+Collateral Provided: ${params.collateralAvailable || "CGTMSE Scheme (Zero-Collateral Guarantee)"}
+Lender Preference: ${params.lenderPreference || "Public / Private Sector Scheduled Banks"}
+Interest Subvention Status: ${params.subventionEligible ? "Eligible for prompt repayment / priority subvention" : "Standard commercial rate"}
 Calculated Monthly EMI: ₹${monthlyEMI.toLocaleString("en-IN")}
 Calculated Total Interest: ₹${totalInterest.toLocaleString("en-IN")}
 Calculated Total Payment: ₹${totalPayment.toLocaleString("en-IN")}
-Debt Service Burden Ratio: ${debtRatio}% of monthly turnover
 
 FIRST 6-MONTH AMORTIZATION PREVIEW:
 ${JSON.stringify(amortizationPreview, null, 2)}

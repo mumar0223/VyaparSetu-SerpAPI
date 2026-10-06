@@ -20,11 +20,11 @@ export interface MandiRecord {
 export interface UdyamDistrictStats {
   district: string;
   state: string;
-  totalRegisteredUnits: number;
-  microPercentage: number;
-  smallPercentage: number;
-  mediumPercentage: number;
-  topSectors: { sector: string; unitCount: number; saturationLevel: "Low" | "Moderate" | "High" }[];
+  totalRegisteredUnits?: number;
+  microPercentage?: number;
+  smallPercentage?: number;
+  mediumPercentage?: number;
+  topSectors: { sector: string; unitCount?: number; saturationLevel: "Low" | "Moderate" | "High" }[];
   odopProduct?: string; // One District One Product
   highPotentialGap: string;
 }
@@ -214,15 +214,13 @@ export async function fetchDistrictMandiRates(
       }
     }
   } catch {
-    // Silent fallback to realistic market heuristics if data.gov.in server is slow
+    // API timeout or network error
   }
 
-  // Grounded fallback dataset
-  const fallback = getFallbackMandiData(normalizedState || "Maharashtra", district || "Pune");
-  mandiCache.set(cacheKey, { timestamp: Date.now(), data: fallback });
-  return fallback;
+  // When data.gov.in returns no records or fails, return empty array.
+  // Never return fake static commodity prices.
+  return [];
 }
-
 
 /**
  * Get Udyam Registration & ODOP District Intelligence
@@ -235,15 +233,14 @@ export function getUdyamDistrictIntelligence(districtName: string, stateName: st
     return {
       district: districtName,
       state: stateName,
-      totalRegisteredUnits: 48200 + (dKey.charCodeAt(0) * 310),
       microPercentage: 92.4,
       smallPercentage: 6.8,
       mediumPercentage: 0.8,
       topSectors: [
-        { sector: odopInfo.keySectors[0] || "Food & Agro Processing", unitCount: 14200, saturationLevel: "Moderate" },
-        { sector: odopInfo.keySectors[1] || "Retail & Kirana", unitCount: 19800, saturationLevel: "High" },
-        { sector: odopInfo.keySectors[2] || "Logistics & Cold Chain", unitCount: 3400, saturationLevel: "Low" },
-        { sector: odopInfo.keySectors[3] || "Handicrafts & Artisans", unitCount: 5100, saturationLevel: "Low" },
+        { sector: odopInfo.keySectors[0] || "Food & Agro Processing", saturationLevel: "Moderate" },
+        { sector: odopInfo.keySectors[1] || "Retail & Kirana", saturationLevel: "High" },
+        { sector: odopInfo.keySectors[2] || "Logistics & Cold Chain", saturationLevel: "Low" },
+        { sector: odopInfo.keySectors[3] || "Handicrafts & Artisans", saturationLevel: "Low" },
       ],
       odopProduct: odopInfo.odop,
       highPotentialGap: `High unmet demand for organized grading, packaging, and direct B2B supply of ${odopInfo.odop}. Low saturation in cold storage and secondary processing units.`,
@@ -253,98 +250,16 @@ export function getUdyamDistrictIntelligence(districtName: string, stateName: st
   return {
     district: districtName || "District Hub",
     state: stateName || "State",
-    totalRegisteredUnits: 34500,
     microPercentage: 93.1,
     smallPercentage: 6.2,
     mediumPercentage: 0.7,
     topSectors: [
-      { sector: "Retail & General Commerce", unitCount: 15400, saturationLevel: "High" },
-      { sector: "Agro & Food Processing", unitCount: 8200, saturationLevel: "Moderate" },
-      { sector: "Rural Transport & Logistics", unitCount: 4100, saturationLevel: "Low" },
-      { sector: "Micro-Manufacturing & Repair", unitCount: 3900, saturationLevel: "Low" },
+      { sector: "Retail & General Commerce", saturationLevel: "High" },
+      { sector: "Agro & Food Processing", saturationLevel: "Moderate" },
+      { sector: "Rural Transport & Logistics", saturationLevel: "Low" },
+      { sector: "Micro-Manufacturing & Repair", saturationLevel: "Low" },
     ],
     odopProduct: "Local Agricultural Produce & Value-Added Staples",
     highPotentialGap: "Substantial opportunity in farm-gate aggregation, spice/grain milling, and digital B2B wholesale distribution with PMEGP/PMFME 35% capital subsidy.",
   };
-}
-
-/**
- * Fallback realistic mandi data when API is offline or rate limited
- */
-function getFallbackMandiData(state: string, district: string): MandiRecord[] {
-  const today = new Date().toLocaleDateString("en-IN");
-  return [
-    {
-      state,
-      district,
-      market: `${district} Central APMC`,
-      commodity: "Tomato",
-      variety: "Hybrid / Local",
-      grade: "FAQ",
-      arrivalDate: today,
-      minPrice: 1200,
-      maxPrice: 1800,
-      modalPrice: 1500,
-    },
-    {
-      state,
-      district,
-      market: `${district} Sub-Market Yard`,
-      commodity: "Onion",
-      variety: "Red / Nasik",
-      grade: "FAQ",
-      arrivalDate: today,
-      minPrice: 1600,
-      maxPrice: 2200,
-      modalPrice: 1950,
-    },
-    {
-      state,
-      district,
-      market: `${district} Grain Market`,
-      commodity: "Wheat",
-      variety: "Lokwan",
-      grade: "FAQ",
-      arrivalDate: today,
-      minPrice: 2400,
-      maxPrice: 2850,
-      modalPrice: 2650,
-    },
-    {
-      state,
-      district,
-      market: `${district} Mandi`,
-      commodity: "Soybean",
-      variety: "Yellow",
-      grade: "FAQ",
-      arrivalDate: today,
-      minPrice: 4200,
-      maxPrice: 4600,
-      modalPrice: 4450,
-    },
-    {
-      state,
-      district,
-      market: `${district} Central APMC`,
-      commodity: "Tur / Arhar (Whole)",
-      variety: "Desi",
-      grade: "FAQ",
-      arrivalDate: today,
-      minPrice: 7200,
-      maxPrice: 8400,
-      modalPrice: 7900,
-    },
-    {
-      state,
-      district,
-      market: `${district} APMC Yard`,
-      commodity: "Coriander / Spices",
-      variety: "Local",
-      grade: "FAQ",
-      arrivalDate: today,
-      minPrice: 3500,
-      maxPrice: 4800,
-      modalPrice: 4200,
-    },
-  ];
 }

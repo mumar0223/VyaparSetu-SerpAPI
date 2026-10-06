@@ -13,11 +13,19 @@ export interface SwotSubAgentResult {
   spokenSummary: string;
 }
 
-const SwotOutputSchema = z.object({
-  markdown: z.string().describe("Comprehensive Markdown SWOT analysis dossier with catchment brief, ```cards, 4-quadrant SWOT matrix table, competitor cluster list with distance & ratings, and actionable strategic action plan"),
-  summary: z.string().describe("1-2 sentence executive summary for chat pill"),
-  spokenSummary: z.string().describe("1 concise sentence suitable for text-to-speech audio feedback"),
-});
+const SwotOutputSchema = z
+  .object({
+    markdown: z
+      .string()
+      .describe(
+        "Comprehensive Markdown SWOT analysis dossier with catchment brief, ```cards, 4-quadrant SWOT matrix table, competitor cluster list with distance & ratings, and actionable strategic action plan",
+      ),
+    summary: z.string().describe("1-2 sentence executive summary for chat pill"),
+    spokenSummary: z
+      .string()
+      .describe("1 concise sentence suitable for text-to-speech audio feedback"),
+  })
+  .passthrough();
 
 /**
  * Autonomous Sub-Agent for SWOT Intelligence.
@@ -31,6 +39,9 @@ export async function runSWOTSubAgent(
     lat?: number;
     lon?: number;
     radiusKm?: number;
+    userBusinessName?: string;
+    priceTier?: string;
+    specificThreatsOrStrengths?: string;
   },
   opts?: {
     onMarkdown?: (md: string) => void;
@@ -65,7 +76,7 @@ export async function runSWOTSubAgent(
   );
 
   const prompt = `You are an elite retail strategy consultant and business intelligence analyst sub-agent.
-Build an authentic, comprehensive 4-Quadrant SWOT Matrix and Competitor Catchment dossier in rich Markdown for a "${category}" business in "${location}" (${radiusKm}km radius).
+Build an authentic, comprehensive 4-Quadrant SWOT Matrix and Competitor Catchment dossier in rich Markdown for "${params.userBusinessName || category}" in "${location}" (${radiusKm}km radius). Segment: ${params.priceTier || "General"}, Special Focus: ${params.specificThreatsOrStrengths || "Local catchment"}.
 
 REAL-TIME CATCHMENT COMPETITOR GROUNDING (Google Maps via SerpApi):
 - Total Competitors Mapped: ${totalCompetitors}

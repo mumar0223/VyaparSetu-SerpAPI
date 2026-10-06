@@ -13,11 +13,19 @@ export interface SchemesSubAgentResult {
   liveWebSources: Array<{ title: string; url: string }>;
 }
 
-const SchemesOutputSchema = z.object({
-  markdown: z.string().describe("Comprehensive Markdown government schemes dossier with sector overview, ```cards, ```calculator simulator, scheme comparison table, and single-window checklist"),
-  summary: z.string().describe("1-2 sentence executive summary for chat pill"),
-  spokenSummary: z.string().describe("1 concise sentence suitable for text-to-speech audio feedback"),
-});
+const SchemesOutputSchema = z
+  .object({
+    markdown: z
+      .string()
+      .describe(
+        "Comprehensive Markdown government schemes dossier with sector overview, ```cards, ```calculator simulator, scheme comparison table, and single-window checklist",
+      ),
+    summary: z.string().describe("1-2 sentence executive summary for chat pill"),
+    spokenSummary: z
+      .string()
+      .describe("1 concise sentence suitable for text-to-speech audio feedback"),
+  })
+  .passthrough();
 
 /**
  * Autonomous Sub-Agent for Government Subsidies & Schemes Evaluation.
@@ -26,8 +34,16 @@ const SchemesOutputSchema = z.object({
  */
 export async function runSchemesSubAgent(
   params: {
+    schemeName?: string;
+    query?: string;
     businessSector?: string;
     investmentAmount?: number;
+    annualTurnover?: number;
+    state?: string;
+    district?: string;
+    applicantCategory?: string;
+    areaType?: string;
+    businessStage?: string;
     isWomanEntrepreneur?: boolean;
   },
   opts?: {
@@ -36,15 +52,31 @@ export async function runSchemesSubAgent(
 ): Promise<SchemesSubAgentResult> {
   const sector = params.businessSector || "Micro & Small Business Enterprise";
   const investment = params.investmentAmount || 1000000;
-  const isWoman = Boolean(params.isWomanEntrepreneur);
+  const isWoman = Boolean(params.isWomanEntrepreneur || params.applicantCategory?.toLowerCase().includes("women"));
+
+  const targetedQuery = [
+    params.schemeName,
+    params.query,
+    sector,
+    params.applicantCategory ? `${params.applicantCategory} category` : null,
+    params.areaType,
+    params.district,
+    params.state,
+    "government subsidy scheme portal official eligibility guidelines India",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   // 1. Live grounding via SerpApi
-  const [sectorResults, generalResults] = await Promise.all([
-    searchGoogleWeb(`${sector} MSME government subsidy scheme portal official 2025 India`, 5),
-    searchGoogleWeb(`PMEGP Mudra CGTMSE subsidy loan eligibility official portal 2025`, 5),
+  const [targetedResults, generalResults] = await Promise.all([
+    searchGoogleWeb(targetedQuery, 6),
+    searchGoogleWeb(
+      `PMEGP Mudra PMFME Stand Up India subsidy eligibility official portal 2025 ${params.state || "India"}`,
+      5,
+    ),
   ]);
 
-  const allWebResults = [...sectorResults, ...generalResults];
+  const allWebResults = [...targetedResults, ...generalResults];
   const uniqueSources = Array.from(
     new Map(allWebResults.filter((r) => r.url && r.title).map((r) => [r.url, { title: r.title, url: r.url }])).values()
   ).slice(0, 6);
@@ -62,7 +94,11 @@ export async function runSchemesSubAgent(
 The user runs or plans to start a commercial venture in:
 Business Sector: "${sector}"
 Investment / Capex Requirement: ₹${investment.toLocaleString("en-IN")}
-Special Categories: ${isWoman ? "Woman Entrepreneur (eligible for higher special subsidy slabs)" : "General MSME Category"}
+Annual Turnover: ${params.annualTurnover ? `₹${params.annualTurnover.toLocaleString("en-IN")}` : "Not specified"}
+Target Scheme / Focus: "${params.schemeName || params.query || "Comprehensive MSME Credit & Subsidy Match"}"
+Demographic Category: ${params.applicantCategory || (isWoman ? "Women Entrepreneur (eligible for higher special subsidy slabs)" : "General MSME Category")}
+Location: ${params.district || ""}, ${params.state || "India"} (${params.areaType || "Urban / Rural"})
+Operating Maturity: ${params.businessStage || "New Enterprise"}
 
 OFFICIAL GOVERNMENT PORTAL GROUNDING VIA SERPAPI GOOGLE SEARCH:
 ${groundingContext || "No live search results available. Rely on standard MSME, PMEGP, Mudra, and CGTMSE central schemes."}

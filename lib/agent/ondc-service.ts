@@ -155,43 +155,27 @@ Generate a concrete, high-ROI ONDC roadmap in this EXACT JSON schema:
     }
 
     if (!parsed || !Array.isArray(parsed.procurement)) {
-      parsed = {
-        summary: `ONDC enables ${resolvedBusinessName} in ${resolvedLocation} to source wholesale inventory 8-12% cheaper and sell directly at 3% commission.`,
-        spokenSummary: `Aap ONDC B2B se direct wholesale stock procure karke lagbhag 10% bacha sakte hain aur Mystore ke zariye 3% commission me online bech sakte hain.`,
-        procurement: [
-          {
-            commodity: `Core ${resolvedCategory} Wholesale Stock & Packaging`,
-            traditionalMarginPercent: "15% distributor markup",
-            ondcWholesaleDiscountPercent: "9% direct factory savings",
-            estimatedMonthlySavingsInr: 15000,
-            topB2bNetworks: ["ONDC B2B Wholesale Yard", "Agri-Trade Digital Exchange"],
+      return {
+        success: false,
+        fromCache: false,
+        category: resolvedCategory,
+        location: resolvedLocation,
+        targetBusinessName: resolvedBusinessName,
+        summary: `ONDC intelligence could not be dynamically evaluated for ${resolvedCategory} in ${resolvedLocation} at this time.`,
+        spokenSummary: `ONDC evaluation for ${resolvedCategory} could not be completed.`,
+        data: {
+          procurement: [],
+          sellerPlatforms: [],
+          logisticsPartners: [],
+          commissionComparison: {
+            traditionalAggregatorRate: "20% - 30%",
+            ondcCommissionRate: "3% - 5%",
+            monthlyMarginBoostPercent: "Lower commission on open network",
           },
-        ],
-        sellerPlatforms: [
-          {
-            platformName: "Mystore",
-            commissionRate: "3.5% per order",
-            buyerNetworkReach: ["Pincode", "Paytm", "Ola"],
-            bestFor: "Fast catalogue setup with zero upfront fee",
-          },
-          {
-            platformName: "Magicpin",
-            commissionRate: "4.0% per order",
-            buyerNetworkReach: ["Paytm", "PhonePe Pincode"],
-            bestFor: "Hyper-local neighbourhood customer delivery",
-          },
-        ],
-        logisticsPartners: ["Shadowfax Local Express", "Dunzo for Business", "Shiprocket Quick"],
-        commissionComparison: {
-          traditionalAggregatorRate: "25% - 30%",
-          ondcCommissionRate: "3% - 5%",
-          monthlyMarginBoostPercent: "+20% retained margin",
+          recommendedActions: [
+            "Register on official ONDC seller portal (ondc.org) with Udyam registration",
+          ],
         },
-        recommendedActions: [
-          "Onboard on Mystore or Magicpin seller app using Udyam registration",
-          "List top 10 best-selling items at competitive local prices",
-          "Enable instant UPI settlement directly to bank account",
-        ],
       };
     }
 

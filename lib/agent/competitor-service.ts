@@ -27,7 +27,7 @@ export interface CompetitorIntelligenceResult {
   district?: string;
   state?: string;
   udyamStats?: {
-    totalRegisteredUnits: number;
+    totalRegisteredUnits?: number;
     saturationLevel: string;
     odopProduct?: string;
     highPotentialGap?: string;
@@ -643,39 +643,28 @@ Return JSON strictly matching this schema with up to 15 competitors:
           }
 
           return {
-            name: comp.name || `Local ${resolvedCategory} Shop`,
-            distance: comp.distance || "Within 500m",
-            landmark: comp.landmark || `Main Road, ${resolvedLocation}`,
+            name: comp.name || `${resolvedCategory} Outlet`,
+            distance: comp.distance || "Within catchment",
+            landmark: comp.landmark || `${resolvedLocation}`,
             speciality: comp.speciality || `${resolvedCategory} services`,
-            priceRange: comp.priceRange || "Competitive market rate",
+            priceRange: comp.priceRange || "Market rate",
             threatLevel: comp.threatLevel || "Medium",
-            differentiator: comp.differentiator || "Local footfall competitor",
+            differentiator: comp.differentiator || "Local competitor",
             lat: compLat,
             lng: compLng,
             rating: comp.rating,
             reviews: comp.reviews,
           };
         });
-      } else {
-        top12Competitors = [
-          {
-            name: `Local Established ${resolvedCategory} Outlet`,
-            distance: "Within 350m",
-            landmark: `Main Market Road, ${resolvedLocation}`,
-            speciality: `Standard ${resolvedCategory} goods & services`,
-            priceRange: "Moderate market rate",
-            threatLevel: "Medium",
-            differentiator: "Established loyal neighborhood customer footfall",
-            lat: lat,
-            lng: lon,
-          },
-        ];
       }
     }
 
     const finalAllPlaces = allPlaces.length > 0 ? allPlaces : top12Competitors;
 
-    const spokenSummaryText = `Found ${finalAllPlaces.length} establishments in catchment, with ${top12Competitors.length} key competitors analyzed for ${resolvedCategory} in ${resolvedLocation}, including ${top12Competitors.slice(0, 3).map((c) => c.name).join(", ")}. Udyam MSME market saturation for this sector is ${matchedSector?.saturationLevel || "Moderate"}.`;
+    const spokenSummaryText =
+      top12Competitors.length > 0
+        ? `Found ${finalAllPlaces.length} establishments in catchment, with ${top12Competitors.length} key competitors analyzed for ${resolvedCategory} in ${resolvedLocation}, including ${top12Competitors.slice(0, 3).map((c) => c.name).join(", ")}. Udyam MSME market saturation for this sector is ${matchedSector?.saturationLevel || "Moderate"}.`
+        : `No direct commercial competitor outlets found for ${resolvedCategory} within ${radiusKm}km in ${resolvedLocation} on Google Maps Places. Market saturation for this trade is ${matchedSector?.saturationLevel || "Low"}.`;
 
     const result: CompetitorIntelligenceResult = {
       success: true,

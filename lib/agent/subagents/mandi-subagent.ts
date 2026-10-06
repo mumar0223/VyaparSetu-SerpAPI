@@ -12,11 +12,19 @@ export interface MandiSubAgentResult {
   spokenSummary: string;
 }
 
-const MandiOutputSchema = z.object({
-  markdown: z.string().describe("Comprehensive Markdown intelligence dossier with headings, market dynamics, ```cards, APMC rate table, arbitrage spreads with ```calculator, and direct procurement & trader advice"),
-  summary: z.string().describe("1-2 sentence executive summary for chat pill"),
-  spokenSummary: z.string().describe("1 concise sentence suitable for text-to-speech audio feedback"),
-});
+const MandiOutputSchema = z
+  .object({
+    markdown: z
+      .string()
+      .describe(
+        "Comprehensive Markdown intelligence dossier with headings, market dynamics, ```cards, APMC rate table, arbitrage spreads with ```calculator, and direct procurement & trader advice",
+      ),
+    summary: z.string().describe("1-2 sentence executive summary for chat pill"),
+    spokenSummary: z
+      .string()
+      .describe("1 concise sentence suitable for text-to-speech audio feedback"),
+  })
+  .passthrough();
 
 /**
  * Autonomous Sub-Agent for APMC Mandi Rate Intelligence & Inter-Mandi Arbitrage.
@@ -28,6 +36,11 @@ export async function runMandiSubAgent(
     commodity?: string;
     state?: string;
     district?: string;
+    variety?: string;
+    targetMarkets?: string[];
+    quantityQuintals?: number;
+    transportCostPerQuintal?: number;
+    query?: string;
   },
   opts?: {
     onMarkdown?: (md: string) => void;
@@ -37,11 +50,21 @@ export async function runMandiSubAgent(
   const district = params.district || "Nashik";
   const state = params.state || "Maharashtra";
 
+  const searchQuery = [
+    params.query,
+    commodity,
+    params.variety,
+    "mandi bhav today",
+    district,
+    state,
+    params.targetMarkets?.join(" "),
+    "APMC modal price per quintal agmarknet",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   // 1. Fetch live mandi yard rates via SerpApi
-  const searchResults = await searchGoogleWeb(
-    `${commodity} mandi bhav today ${district} ${state} APMC modal price per quintal agmarknet`,
-    8
-  );
+  const searchResults = await searchGoogleWeb(searchQuery, 8);
 
   const groundingContext = searchResults
     .map((r, i) => `[Source ${i + 1}: ${r.title}]\n${r.snippet}`)
@@ -55,8 +78,12 @@ export async function runMandiSubAgent(
   const prompt = `You are an elite agricultural market economist and APMC mandi specialist sub-agent.
 The user is inquiring about live APMC mandi wholesale prices, arrivals, and transport arbitrage for:
 Commodity: "${commodity}"
+Variety: "${params.variety || "Standard / All Available Commercial Varieties"}"
 Primary Hub / District: "${district}"
 State: "${state}"
+Comparison Markets: ${params.targetMarkets?.join(", ") || "Nearby Major Consumption Mandis (e.g. Azadpur, Vashi, Gultekdi)"}
+Trade Lot Size: ${params.quantityQuintals || 100} Quintals
+Estimated Freight Cost: ${params.transportCostPerQuintal ? `₹${params.transportCostPerQuintal}/quintal` : "Standard inter-district diesel freight"}
 
 REAL-TIME APMC & AGMARKNET GROUNDING VIA SERPAPI GOOGLE SEARCH:
 ${groundingContext || "No live snippets retrieved. Use verified current seasonal agricultural trading benchmarks."}

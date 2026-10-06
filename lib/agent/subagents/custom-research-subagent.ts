@@ -23,11 +23,19 @@ export interface CustomResearchResult {
   sources: Array<{ title: string; url: string }>;
 }
 
-const CustomLlmSchema = z.object({
-  markdown: z.string().describe("Complete Markdown content containing the cards, table, calculator, and checklist"),
-  summary: z.string().describe("1-2 sentence executive summary for chat"),
-  spokenSummary: z.string().describe("1 concise sentence suitable for text-to-speech audio feedback"),
-});
+const CustomLlmSchema = z
+  .object({
+    markdown: z
+      .string()
+      .describe(
+        "Complete Markdown content containing the cards, table, calculator, and checklist",
+      ),
+    summary: z.string().describe("1-2 sentence executive summary for chat"),
+    spokenSummary: z
+      .string()
+      .describe("1 concise sentence suitable for text-to-speech audio feedback"),
+  })
+  .passthrough();
 
 /**
  * Autonomous Sub-Agent for On-Demand Custom Domain Research.

@@ -26,593 +26,793 @@ import { stableMarkdown } from "./subagents/stream-structured";
  * Zod Schemas for Tools
  */
 
-const MandiRatesSchema = z.object({
-  commodity: z
-    .string()
-    .optional()
-    .describe(
-      "Crop or commodity name in English or Hindi, e.g. Wheat (गेहूं), Mustard (सरसों), Onion (प्याज), Paddy (धान), Potato (आलू), Soybean (सोयाबीन), Tomato (टमाटर), Gram (चना), Cotton (कपास), Sugarcane (गन्ना)",
-    ),
-  state: z
-    .string()
-    .optional()
-    .describe(
-      "State filter, e.g. Uttar Pradesh (UP), Madhya Pradesh (MP), Maharashtra, Gujarat, Punjab, Rajasthan, Haryana, Bihar",
-    ),
-  district: z
-    .string()
-    .optional()
-    .describe(
-      "District or city filter, e.g. Gorakhpur, Varanasi, Indore, Nashik, Pune, Lucknow, Kanpur, Prayagraj, Patna, Jaipur",
-    ),
-  market: z
-    .string()
-    .optional()
-    .describe(
-      "Specific APMC Mandi e.g. Gorakhpur Mandi, Lasalgaon, Azadpur, Indore APMC",
-    ),
-});
+const MandiRatesSchema = z
+  .object({
+    commodity: z
+      .string()
+      .optional()
+      .describe(
+        "Crop or commodity name in English or Hindi, e.g. Wheat (गेहूं), Mustard (सरसों), Onion (प्याज), Paddy (धान), Potato (आलू), Soybean (सोयाबीन), Tomato (टमाटर), Gram (चना), Cotton (कपास), Sugarcane (गन्ना)",
+      ),
+    state: z
+      .string()
+      .optional()
+      .describe(
+        "State filter, e.g. Uttar Pradesh (UP), Madhya Pradesh (MP), Maharashtra, Gujarat, Punjab, Rajasthan, Haryana, Bihar",
+      ),
+    district: z
+      .string()
+      .optional()
+      .describe(
+        "District or city filter, e.g. Gorakhpur, Varanasi, Indore, Nashik, Pune, Lucknow, Kanpur, Prayagraj, Patna, Jaipur",
+      ),
+    market: z
+      .string()
+      .optional()
+      .describe(
+        "Specific APMC Mandi e.g. Gorakhpur Mandi, Lasalgaon, Azadpur, Indore APMC",
+      ),
+    variety: z
+      .string()
+      .optional()
+      .describe(
+        "Specific crop variety (e.g. 'Lokwan', 'Sharbati', 'Desi', 'Hybrid', 'Red Onion', 'White Onion', 'Yellow Soybean')",
+      ),
+    grade: z
+      .string()
+      .optional()
+      .describe("Produce quality grade (e.g. 'FAQ', 'Grade A', 'Super', 'Medium')"),
+    query: z
+      .string()
+      .optional()
+      .describe("Optional free-form rate inquiry or specific market yard search"),
+  })
+  .passthrough();
 
-const WebSearchSchema = z.object({
-  query: z
-    .string()
-    .describe(
-      "Search query for live trade, market policy, tax circulars, or business information",
-    ),
-  numResults: z
-    .number()
-    .optional()
-    .default(5)
-    .describe("Number of search results to return"),
-});
+const WebSearchSchema = z
+  .object({
+    query: z
+      .string()
+      .describe(
+        "Search query for live trade, market policy, tax circulars, or business information",
+      ),
+    numResults: z
+      .number()
+      .optional()
+      .default(5)
+      .describe("Number of search results to return"),
+    focusDomain: z
+      .string()
+      .optional()
+      .describe("Optional domain to focus search (e.g. 'gov.in', 'rbi.org.in', 'cbic.gov.in')"),
+  })
+  .passthrough();
 
-const SearchCompetitorsSchema = z.object({
-  query: z
-    .string()
-    .optional()
-    .describe(
-      "Optional query or description of the target business or trade sector to search",
-    ),
-  category: z
-    .string()
-    .optional()
-    .describe(
-      "Business sector or category, e.g. 'Biryani & Food Outlets', 'Kirana / Grocery', 'Automobile Parts', 'Textiles'",
-    ),
-  radiusKm: z
-    .number()
-    .optional()
-    .default(5)
-    .describe("Catchment radius in kilometers to scan (e.g. 1, 2, 5, 10)"),
-  location: z
-    .string()
-    .optional()
-    .describe(
-      "Specific street, area, market yard, or city if provided by user",
-    ),
-  lat: z.number().optional().describe("Latitude coordinate if available"),
-  lon: z.number().optional().describe("Longitude coordinate if available"),
-  bypassCache: z
-    .boolean()
-    .optional()
-    .default(false)
-    .describe("Whether to bypass DB cache"),
-});
+const SearchCompetitorsSchema = z
+  .object({
+    query: z
+      .string()
+      .optional()
+      .describe(
+        "Optional query or description of the target business or trade sector to search",
+      ),
+    category: z
+      .string()
+      .optional()
+      .describe(
+        "Business sector or category, e.g. 'Biryani & Food Outlets', 'Kirana / Grocery', 'Automobile Parts', 'Textiles'",
+      ),
+    radiusKm: z
+      .number()
+      .optional()
+      .default(5)
+      .describe("Catchment radius in kilometers to scan (e.g. 1, 2, 5, 10)"),
+    location: z
+      .string()
+      .optional()
+      .describe(
+        "Specific street, area, market yard, or city if provided by user",
+      ),
+    lat: z.number().optional().describe("Latitude coordinate if available"),
+    lon: z.number().optional().describe("Longitude coordinate if available"),
+    userBusinessName: z
+      .string()
+      .optional()
+      .describe("User's own business name to benchmark directly against competitors"),
+    priceTier: z
+      .enum(["Budget", "Mid-Range", "Premium", "All"])
+      .optional()
+      .describe("Target price/customer segment filter"),
+    bypassCache: z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe("Whether to bypass DB cache"),
+  })
+  .passthrough();
 
-const OndcIntelligenceSchema = z.object({
-  query: z
-    .string()
-    .optional()
-    .describe(
-      "Specific ONDC inquiry e.g. 'How to sell on ONDC' or 'Wholesale procurement'",
-    ),
-  category: z
-    .string()
-    .optional()
-    .describe(
-      "Business trade category e.g. 'Biryani & Food Outlets', 'Kirana', 'Apparel'",
-    ),
-  location: z.string().optional().describe("City or state location"),
-  intent: z
-    .enum(["procure", "sell", "logistics", "general"])
-    .optional()
-    .default("general")
-    .describe(
-      "Focus area: procure (buy cheaper), sell (list catalog), logistics, or general",
-    ),
-  bypassCache: z
-    .boolean()
-    .optional()
-    .default(false)
-    .describe("Whether to force a fresh re-evaluation bypassing DB cache"),
-});
+const OndcIntelligenceSchema = z
+  .object({
+    query: z
+      .string()
+      .optional()
+      .describe(
+        "Specific ONDC inquiry e.g. 'How to sell on ONDC', 'Bulk raw material sourcing', or 'Logistics integration'",
+      ),
+    category: z
+      .string()
+      .optional()
+      .describe(
+        "Business trade category e.g. 'Biryani & Food Outlets', 'Kirana', 'Apparel', 'Agro-processing'",
+      ),
+    location: z.string().optional().describe("City, district or state location"),
+    pincode: z
+      .string()
+      .optional()
+      .describe("6-digit postal pincode for hyper-local delivery provider lookup"),
+    currentSalesChannels: z
+      .string()
+      .optional()
+      .describe(
+        "Current sales channels (e.g. 'Offline counter only', 'Zomato/Swiggy 28%', 'Amazon 22%') for commission comparison",
+      ),
+    monthlyVolume: z
+      .string()
+      .optional()
+      .describe(
+        "Order volume or turnover (e.g. '30 orders/day', '₹2 Lakhs/month', '5 tonnes') to negotiate bulk wholesale discounts",
+      ),
+    hasGst: z
+      .boolean()
+      .optional()
+      .describe(
+        "Whether enterprise holds GSTIN (ONDC allows non-GST sellers for intra-state/local commerce)",
+      ),
+    intent: z
+      .enum(["procure", "sell", "logistics", "general"])
+      .optional()
+      .default("general")
+      .describe(
+        "Focus area: procure (buy cheaper), sell (list catalog), logistics, or general",
+      ),
+    bypassCache: z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe("Whether to force a fresh re-evaluation bypassing DB cache"),
+  })
+  .passthrough();
 
-const PredictDistrictBusinessesSchema = z.object({
-  district: z
-    .string()
-    .optional()
-    .describe(
-      "District or city to evaluate (e.g. Lucknow, Varanasi, Pune, Indore, Kanpur)",
-    ),
-  state: z
-    .string()
-    .optional()
-    .describe(
-      "State name (e.g. Uttar Pradesh, Maharashtra, Madhya Pradesh, Gujarat)",
-    ),
-  budget: z
-    .number()
-    .optional()
-    .describe("Capital investment budget in INR (e.g. 150000, 300000, 500000)"),
-  category: z
-    .string()
-    .optional()
-    .describe(
-      "Specific sector or trade interest (e.g. Food Processing, Packaging, Manufacturing, Retail, Technical Services)",
-    ),
-  riskLevel: z
-    .enum(["Low", "Moderate", "High"])
-    .optional()
-    .default("Moderate")
-    .describe("Risk tolerance for the venture"),
-  bypassCache: z
-    .boolean()
-    .optional()
-    .default(false)
-    .describe("Whether to force fresh live web search and bypass DB cache"),
-});
+const PredictDistrictBusinessesSchema = z
+  .object({
+    district: z
+      .string()
+      .optional()
+      .describe(
+        "District or city to evaluate (e.g. Lucknow, Varanasi, Pune, Indore, Kanpur)",
+      ),
+    state: z
+      .string()
+      .optional()
+      .describe(
+        "State name (e.g. Uttar Pradesh, Maharashtra, Madhya Pradesh, Gujarat)",
+      ),
+    budget: z
+      .number()
+      .optional()
+      .describe("Capital investment budget in INR (e.g. 150000, 300000, 500000)"),
+    category: z
+      .string()
+      .optional()
+      .describe(
+        "Specific sector or trade interest (e.g. Food Processing, Packaging, Manufacturing, Retail, Technical Services)",
+      ),
+    riskLevel: z
+      .enum(["Low", "Moderate", "High"])
+      .optional()
+      .default("Moderate")
+      .describe("Risk tolerance for the venture"),
+    spaceAvailableSqFt: z
+      .number()
+      .optional()
+      .describe("Commercial or industrial floor space available in sq ft (e.g. 200, 1000, 5000)"),
+    powerConnectivity: z
+      .enum(["Single_Phase_Domestic", "Three_Phase_Commercial", "High_Tension_Industrial"])
+      .optional()
+      .describe("Available power supply infrastructure"),
+    salesChannel: z
+      .enum(["Local_Retail", "B2B_Wholesale", "Ecommerce_ONDC", "Export"])
+      .optional()
+      .describe("Primary intended customer channel"),
+    entrepreneurExperience: z
+      .string()
+      .optional()
+      .describe("Applicant's background or prior business experience"),
+    manpowerAvailable: z
+      .number()
+      .optional()
+      .describe("Number of workers/staff readily available or intended to hire"),
+    preferredSubsidies: z
+      .string()
+      .optional()
+      .describe("Specific subsidies user is interested in (e.g. PMEGP, PMFME, PM Surya Ghar, Mudra)"),
+    bypassCache: z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe("Whether to force fresh live web search and bypass DB cache"),
+  })
+  .passthrough();
 
-const SchemeEligibilitySchema = z.object({
-  schemeName: z
-    .enum([
-      "PM_MUDRA",
-      "PM_SVANIDHI",
-      "STAND_UP_INDIA",
-      "PMEGP",
-      "PM_VISHWAKARMA",
-    ])
-    .describe("Government scheme to evaluate"),
-  annualTurnover: z
-    .number()
-    .optional()
-    .describe("Annual sales/turnover in INR"),
-  loanAmountRequested: z
-    .number()
-    .optional()
-    .describe("Requested loan amount in INR"),
-});
+const SchemeEligibilitySchema = z
+  .object({
+    schemeName: z
+      .string()
+      .describe(
+        "Name of the government credit, subsidy, or grant scheme to evaluate (e.g. Mudra, PMEGP, PM SVANidhi, Stand-Up India, PMFME, KCC, CGTMSE, or State subsidy)",
+      ),
+    query: z
+      .string()
+      .optional()
+      .describe(
+        "Specific user question or focus area (e.g. 'subsidy for women', 'documents needed', 'machinery loan limit', 'interest subvention')",
+      ),
+    businessSector: z
+      .string()
+      .optional()
+      .describe(
+        "Business trade or manufacturing category (e.g. Textiles, Food Processing, Kirana, Metal Fabrication)",
+      ),
+    state: z
+      .string()
+      .optional()
+      .describe(
+        "State or UT (crucial for state-specific subsidies like UP ODOP, MP Udyami, and regional margin money)",
+      ),
+    district: z
+      .string()
+      .optional()
+      .describe(
+        "District or city (for DIC nodal office linkage and cluster schemes)",
+      ),
+    applicantCategory: z
+      .string()
+      .optional()
+      .describe(
+        "Beneficiary demographic group: General, Women, SC/ST, OBC, Minority, Ex-Serviceman (qualifies for 25%-35% subsidy)",
+      ),
+    areaType: z
+      .enum(["Rural", "Urban", "Semi-Urban"])
+      .optional()
+      .describe("Rural vs Urban location (affects subsidy tier in PMEGP and PMFME)"),
+    loanAmountRequested: z
+      .number()
+      .optional()
+      .describe("Requested loan or project cost in INR"),
+    annualTurnover: z
+      .number()
+      .optional()
+      .describe("Annual sales/turnover in INR"),
+    businessStage: z
+      .enum(["New", "Expansion", "Modernization"])
+      .optional()
+      .describe("New project setup vs existing enterprise expansion"),
+  })
+  .passthrough();
 
-const StageBudgetSchema = z.object({
-  targetArtifactId: z
-    .string()
-    .optional()
-    .describe("Optional ID or index of an existing budget to update in-place"),
-  name: z
-    .string()
-    .describe(
-      "Name of the budget plan, e.g. 'Q2 Operating Budget' or 'Harvest Stock Plan'",
-    ),
-  period: z
-    .enum(["Monthly", "Quarterly", "Annual", "Weekly"])
-    .default("Monthly")
-    .describe("Budget period frequency"),
-  totalAmount: z.number().positive().describe("Total budget limit in INR"),
-  items: z
-    .array(
-      z.object({
-        category: z
+const StageBudgetSchema = z
+  .object({
+    targetArtifactId: z
+      .string()
+      .optional()
+      .describe("Optional ID or index of an existing budget to update in-place"),
+    name: z
+      .string()
+      .describe(
+        "Name of the budget plan, e.g. 'Q2 Operating Budget' or 'Harvest Stock Plan'",
+      ),
+    period: z
+      .enum(["Monthly", "Quarterly", "Annual", "Weekly"])
+      .default("Monthly")
+      .describe("Budget period frequency"),
+    totalAmount: z.number().positive().describe("Total budget limit in INR"),
+    startDate: z.string().optional().describe("Budget start date YYYY-MM-DD"),
+    endDate: z.string().optional().describe("Budget end date YYYY-MM-DD"),
+    alertThresholdPercent: z
+      .number()
+      .optional()
+      .describe("Threshold % to trigger overspend alert (e.g. 80, 90)"),
+    items: z
+      .array(
+        z.object({
+          category: z
+            .string()
+            .describe(
+              "Expense category, e.g. Inventory, Logistics, Wages, Utilities, Marketing",
+            ),
+          allocatedAmount: z
+            .number()
+            .positive()
+            .describe("Allocated amount in INR"),
+        }),
+      )
+      .min(1)
+      .describe("List of category allocations"),
+  })
+  .passthrough();
+
+const StageExpenseSchema = z
+  .object({
+    targetArtifactId: z
+      .string()
+      .optional()
+      .describe("Optional ID or index of an existing expense to update in-place"),
+    category: z
+      .string()
+      .describe(
+        "Expense category e.g. Inventory / Raw Materials, Logistics & Transport, Utilities, Rent, Wages",
+      ),
+    amount: z.number().positive().describe("Expense amount in INR"),
+    vendor: z.string().optional().describe("Vendor / Supplier name or party"),
+    description: z
+      .string()
+      .optional()
+      .describe("Brief description of the expense"),
+    invoiceNumber: z.string().optional().describe("Invoice / Bill / Challan number"),
+    taxAmount: z.number().optional().describe("GST or tax amount in INR"),
+    paymentMethod: z
+      .enum(["UPI", "CASH", "BANK_TRANSFER", "CHEQUE", "CREDIT_CARD", "OTHER"])
+      .default("UPI")
+      .describe("Payment method"),
+    paymentStatus: z
+      .enum(["PAID", "PENDING", "PARTIAL"])
+      .optional()
+      .default("PAID")
+      .describe("Payment settlement status"),
+    notes: z.string().optional().describe("Optional notes"),
+  })
+  .passthrough();
+
+const StageTransactionSchema = z
+  .object({
+    targetArtifactId: z
+      .string()
+      .optional()
+      .describe(
+        "Optional ID or index of an existing transaction to update in-place",
+      ),
+    type: z
+      .enum(["INCOME", "EXPENSE", "TRANSFER", "DEBT_PAYMENT", "SAVING", "OTHER"])
+      .describe("Transaction type"),
+    amount: z.number().positive().describe("Transaction amount in INR"),
+    category: z.string().optional().describe("Category of transaction"),
+    description: z
+      .string()
+      .optional()
+      .describe("Transaction description or customer/vendor name"),
+    paymentMethod: z
+      .enum(["UPI", "CASH", "BANK_TRANSFER", "CHEQUE", "CREDIT_CARD", "OTHER"])
+      .optional()
+      .default("UPI")
+      .describe("Payment method used"),
+    referenceNumber: z
+      .string()
+      .optional()
+      .describe("UPI UTR / Bank reference / Transaction ID"),
+    taxAmount: z.number().optional().describe("Tax / GST amount in INR"),
+  })
+  .passthrough();
+
+const StageSavingsGoalSchema = z
+  .object({
+    targetArtifactId: z
+      .string()
+      .optional()
+      .describe(
+        "Optional ID or index of an existing savings goal to update in-place",
+      ),
+    name: z
+      .string()
+      .describe(
+        "Goal name, e.g. 'New Cold Storage Machine' or 'Diwali Festival Stock Buffer'",
+      ),
+    targetAmount: z.number().positive().describe("Target savings goal in INR"),
+    currentAmount: z
+      .number()
+      .optional()
+      .describe("Current funds accumulated towards this goal in INR"),
+    targetDate: z
+      .string()
+      .optional()
+      .describe("Target completion date in YYYY-MM-DD format"),
+    monthlyContribution: z
+      .number()
+      .optional()
+      .describe("Planned monthly recurring contribution in INR"),
+    priority: z
+      .enum(["HIGH", "MEDIUM", "LOW"])
+      .optional()
+      .default("MEDIUM")
+      .describe("Priority ranking of the savings target"),
+  })
+  .passthrough();
+
+const StageDebtSchema = z
+  .object({
+    targetArtifactId: z
+      .string()
+      .optional()
+      .describe("Optional ID or index of an existing debt to update in-place"),
+    type: z
+      .enum([
+        "TERM_LOAN",
+        "WORKING_CAPITAL",
+        "EQUIPMENT_FINANCING",
+        "CREDIT_CARD",
+        "OTHER",
+      ])
+      .default("WORKING_CAPITAL")
+      .describe("Type of debt/liability"),
+    lender: z
+      .string()
+      .describe(
+        "Lender name, e.g. 'SBI MSME Branch' or 'Local Cooperative Bank'",
+      ),
+    totalAmount: z
+      .number()
+      .positive()
+      .describe("Original sanctioned loan amount in INR"),
+    amountOutStanding: z
+      .number()
+      .positive()
+      .describe("Current outstanding balance in INR"),
+    interestRate: z
+      .number()
+      .optional()
+      .describe("Annual interest rate percentage, e.g. 8.5"),
+    emiAmount: z.number().optional().describe("Monthly EMI installment in INR"),
+    tenureMonthsRemaining: z
+      .number()
+      .optional()
+      .describe("Remaining loan tenure in months"),
+    nextDueDate: z.string().optional().describe("Next EMI installment due date YYYY-MM-DD"),
+    subsidyLinked: z
+      .string()
+      .optional()
+      .describe("Associated government subsidy scheme if any (e.g. 'PMEGP 35%', 'Mudra Shishu')"),
+    collateralType: z
+      .string()
+      .optional()
+      .describe("Collateral status: 'CGTMSE_Zero_Collateral', 'Hypothecation', 'Property_Mortgage'"),
+  })
+  .passthrough();
+
+export const StageFormFieldSchema = z
+  .object({
+    id: z
+      .string()
+      .describe(
+        "Unique field key/id (e.g. 'fullName', 'loanAmount', 'businessType', 'purpose')",
+      ),
+    label: z
+      .string()
+      .describe(
+        "Field display label (e.g. 'Applicant Full Name (आवेदक का पूरा नाम)')",
+      ),
+    type: z
+      .string()
+      .default("text")
+      .describe("Input field type (text, number, select, date, textarea, checkbox, phone, email, etc.)"),
+    defaultValue: z
+      .any()
+      .optional()
+      .describe("Default or suggested pre-filled value"),
+    value: z.any().optional().describe("Current pre-filled value"),
+    placeholder: z.string().optional().describe("Helpful placeholder text"),
+    options: z
+      .array(z.string())
+      .optional()
+      .describe("List of options for 'select' dropdown type"),
+    required: z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe("Whether the field is mandatory"),
+    helpText: z
+      .string()
+      .optional()
+      .describe("Optional brief description or note under the input"),
+    colSpan: z
+      .number()
+      .optional()
+      .describe(
+        "Number of columns this field spans (e.g. 1 or 2 for full width in a 2-col section)",
+      ),
+    displayVariant: z
+      .string()
+      .optional()
+      .describe(
+        "Layout styling: 'fill_line' (underlined line), 'character_boxes' / 'char_boxes' (discrete boxes for PAN/Aadhaar/IFSC), 'boxed', 'table_cell'",
+      ),
+    suffix: z
+      .string()
+      .optional()
+      .describe("Unit or suffix, e.g. '₹', 'Years', '%'"),
+  })
+  .passthrough();
+
+export const StageFormRowSchema = z
+  .object({
+    fields: z
+      .array(StageFormFieldSchema)
+      .min(1)
+      .describe(
+        "Fields sitting together on this line (1, 2, or 3 fields in a row)",
+      ),
+  })
+  .passthrough();
+
+export const StageFormTableSchema = z
+  .object({
+    headers: z
+      .array(z.string())
+      .describe(
+        "Table column headers (e.g. ['क्रमांक', 'शैक्षिक योग्यता', 'उत्तीर्ण वर्ष', 'पूर्णांक', 'प्राप्तांक', 'प्रतिशत', 'बोर्ड'])",
+      ),
+    rows: z
+      .array(z.array(z.union([z.string(), z.number()])))
+      .describe("Array of table row cell values"),
+  })
+  .passthrough();
+
+export const StageFormSectionSchema = z
+  .object({
+    title: z
+      .string()
+      .optional()
+      .describe(
+        "Clean plain section heading (e.g. '1. Branch Particulars', '2. Applicant & Promoter Identity', '3. Credit Facility Request'). NEVER use brackets, pipes, dashes or decorative symbols like '—[ ... ]—' or '|-'.",
+      ),
+    description: z
+      .string()
+      .optional()
+      .describe("Brief subtitle or description for this section"),
+    columns: z
+      .number()
+      .optional()
+      .default(2)
+      .describe("Default column count for the section (1, 2, or 3)"),
+    photoBox: z
+      .object({
+        label: z
           .string()
-          .describe(
-            "Expense category, e.g. Inventory, Logistics, Wages, Utilities, Marketing",
-          ),
-        allocatedAmount: z
-          .number()
-          .positive()
-          .describe("Allocated amount in INR"),
-      }),
-    )
-    .min(1)
-    .describe("List of category allocations"),
-});
+          .optional()
+          .default("फ़ोटो / Passport Photo")
+          .describe("Photo box label"),
+        url: z.string().optional().describe("Optional photo URL if available"),
+      })
+      .passthrough()
+      .optional()
+      .describe("Optional passport photo box on the right of the section"),
+    rows: z
+      .array(StageFormRowSchema)
+      .optional()
+      .describe("List of rows in this section. Each row holds 1, 2, or 3 fields"),
+    table: StageFormTableSchema.optional().describe(
+      "Optional embedded sub-table for qualifications, marksheets, or financial breakdown",
+    ),
+    fields: z
+      .array(StageFormFieldSchema)
+      .optional()
+      .describe("Fallback flat list of fields in this section"),
+  })
+  .passthrough();
 
-const StageExpenseSchema = z.object({
-  targetArtifactId: z
-    .string()
-    .optional()
-    .describe("Optional ID or index of an existing expense to update in-place"),
-  category: z
-    .string()
-    .describe(
-      "Expense category e.g. Inventory / Raw Materials, Logistics & Transport, Utilities, Rent, Wages",
-    ),
-  amount: z.number().positive().describe("Expense amount in INR"),
-  vendor: z.string().optional().describe("Vendor / Supplier name or party"),
-  description: z
-    .string()
-    .optional()
-    .describe("Brief description of the expense"),
-  paymentMethod: z
-    .enum(["UPI", "CASH", "BANK_TRANSFER", "CHEQUE", "CREDIT_CARD", "OTHER"])
-    .default("UPI")
-    .describe("Payment method"),
-  notes: z.string().optional().describe("Optional notes"),
-});
+export const StageFormThemeSchema = z
+  .object({
+    primaryColor: z
+      .string()
+      .optional()
+      .describe(
+        "Bank/Scheme brand color (e.g. '#1E3A8A' for SBI, '#15803D' for Agriculture, '#C2410C' for PMEGP)",
+      ),
+    pageBg: z
+      .string()
+      .optional()
+      .describe("Paper sheet background tint (e.g. '#FFFFFF', '#FAF8F5')"),
+    borderColor: z
+      .string()
+      .optional()
+      .describe("Border color for table grid lines (e.g. '#CBD5E1')"),
+  })
+  .passthrough();
 
-const StageTransactionSchema = z.object({
-  targetArtifactId: z
-    .string()
-    .optional()
-    .describe(
-      "Optional ID or index of an existing transaction to update in-place",
+export const StageFormSchema = z
+  .object({
+    targetArtifactId: z
+      .string()
+      .optional()
+      .describe(
+        "Optional ID or index (e.g. 'art_1' or '1') of an existing form to update in-place instead of creating a new duplicate",
+      ),
+    title: z
+      .string()
+      .describe(
+        "Form title, e.g. 'MSME Business Loan Application Form' or 'GOVT ITI Registration Form'",
+      ),
+    documentBadge: z
+      .string()
+      .optional()
+      .describe(
+        "Official document code/badge (e.g. 'FORM NO. 1 • PMEGP', 'UP ITI REGISTRATION')",
+      ),
+    description: z
+      .string()
+      .optional()
+      .describe("Subtitle, summary or instructions for the form"),
+    submitLabel: z
+      .string()
+      .optional()
+      .default("Approve & Submit")
+      .describe("Label on the primary action button"),
+    formType: z
+      .string()
+      .optional()
+      .describe(
+        "Form category or domain, e.g. 'loan_application', 'subsidy_registration', 'vendor_kyc', 'custom'",
+      ),
+    theme: StageFormThemeSchema.optional().describe(
+      "Optional AI-driven styling theme",
     ),
-  type: z
-    .enum(["INCOME", "EXPENSE", "TRANSFER", "DEBT_PAYMENT", "SAVING", "OTHER"])
-    .describe("Transaction type"),
-  amount: z.number().positive().describe("Transaction amount in INR"),
-  category: z.string().optional().describe("Category of transaction"),
-  description: z
-    .string()
-    .optional()
-    .describe("Transaction description or customer/vendor name"),
-});
+    sections: z
+      .array(StageFormSectionSchema)
+      .min(1)
+      .describe("Array of form sections containing dynamic interactive fields"),
+  })
+  .passthrough();
 
-const StageSavingsGoalSchema = z.object({
-  targetArtifactId: z
-    .string()
-    .optional()
-    .describe(
-      "Optional ID or index of an existing savings goal to update in-place",
-    ),
-  name: z
-    .string()
-    .describe(
-      "Goal name, e.g. 'New Cold Storage Machine' or 'Diwali Festival Stock Buffer'",
-    ),
-  targetAmount: z.number().positive().describe("Target savings goal in INR"),
-  targetDate: z
-    .string()
-    .optional()
-    .describe("Target completion date in YYYY-MM-DD format"),
-});
+export const StageDocumentThemeSchema = z
+  .object({
+    pageBg: z
+      .string()
+      .optional()
+      .describe("Background color (e.g. '#FFFFFF', '#FAF8F5')"),
+    primaryColor: z
+      .string()
+      .optional()
+      .describe(
+        "Primary highlight/accent color (e.g. '#1E3A8A', '#15803D', '#C2410C')",
+      ),
+    textColor: z.string().optional().describe("Text color (e.g. '#0F172A')"),
+    borderColor: z
+      .string()
+      .optional()
+      .describe("Border tint for tables/boxes (e.g. '#E2E8F0')"),
+  })
+  .passthrough();
 
-const StageDebtSchema = z.object({
-  targetArtifactId: z
-    .string()
-    .optional()
-    .describe("Optional ID or index of an existing debt to update in-place"),
-  type: z
-    .enum([
-      "TERM_LOAN",
-      "WORKING_CAPITAL",
-      "EQUIPMENT_FINANCING",
-      "CREDIT_CARD",
-      "OTHER",
-    ])
-    .default("WORKING_CAPITAL")
-    .describe("Type of debt/liability"),
-  lender: z
-    .string()
-    .describe(
-      "Lender name, e.g. 'SBI MSME Branch' or 'Local Cooperative Bank'",
+export const StageDocumentSchema = z
+  .object({
+    targetArtifactId: z
+      .string()
+      .optional()
+      .describe("Optional ID of an existing document to update in place"),
+    title: z
+      .string()
+      .describe(
+        "Title of the document (e.g. 'Wholesale Fertilizer Price Catalog', 'Mudra vs PMEGP Comparison Matrix', 'Official Trade Agreement')",
+      ),
+    docType: z
+      .string()
+      .default("catalog")
+      .describe("Document category (catalog, table, report, guide, agreement, invoice, other)"),
+    summary: z
+      .string()
+      .optional()
+      .describe("Brief 1-sentence summary of the document"),
+    theme: StageDocumentThemeSchema.optional().describe(
+      "AI-driven visual styling theme matching domain",
     ),
-  totalAmount: z
-    .number()
-    .positive()
-    .describe("Original sanctioned loan amount in INR"),
-  amountOutStanding: z
-    .number()
-    .positive()
-    .describe("Current outstanding balance in INR"),
-  interestRate: z
-    .number()
-    .optional()
-    .describe("Annual interest rate percentage, e.g. 8.5"),
-  emiAmount: z.number().optional().describe("Monthly EMI installment in INR"),
-});
+    content: z
+      .string()
+      .describe(
+        "Full markdown text containing GitHub-Flavored Markdown tables, headings, bold prices, badges, and terms",
+      ),
+  })
+  .passthrough();
 
-export const StageFormFieldSchema = z.object({
-  id: z
-    .string()
-    .describe(
-      "Unique field key/id (e.g. 'fullName', 'loanAmount', 'businessType', 'purpose')",
-    ),
-  label: z
-    .string()
-    .describe(
-      "Field display label (e.g. 'Applicant Full Name (आवेदक का पूरा नाम)')",
-    ),
-  type: z
-    .enum(["text", "number", "select", "date", "textarea", "checkbox"])
-    .default("text")
-    .describe("Input field type"),
-  defaultValue: z
-    .any()
-    .optional()
-    .describe("Default or suggested pre-filled value"),
-  value: z.any().optional().describe("Current pre-filled value"),
-  placeholder: z.string().optional().describe("Helpful placeholder text"),
-  options: z
-    .array(z.string())
-    .optional()
-    .describe("List of options for 'select' dropdown type"),
-  required: z
-    .boolean()
-    .optional()
-    .default(false)
-    .describe("Whether the field is mandatory"),
-  helpText: z
-    .string()
-    .optional()
-    .describe("Optional brief description or note under the input"),
-  colSpan: z
-    .number()
-    .optional()
-    .describe(
-      "Number of columns this field spans (e.g. 1 or 2 for full width in a 2-col section)",
-    ),
-  displayVariant: z
-    .enum(["fill_line", "character_boxes", "char_boxes", "boxed", "table_cell"])
-    .optional()
-    .describe(
-      "Layout styling: 'fill_line' (underlined line), 'character_boxes' / 'char_boxes' (discrete boxes for PAN/Aadhaar/IFSC), 'boxed'",
-    ),
-  suffix: z
-    .string()
-    .optional()
-    .describe("Unit or suffix, e.g. '₹', 'Years', '%'"),
-});
+const GetArtifactsSchema = z
+  .object({
+    artifactType: z
+      .string()
+      .optional()
+      .default("all")
+      .describe(
+        "Filter by artifact type ('form', 'document', 'chart', 'budget', 'expense', 'transaction', 'saving_goal', 'debt', or 'all')",
+      ),
+    limit: z
+      .number()
+      .optional()
+      .default(10)
+      .describe("Max number of recent artifacts to retrieve (defaults to 10)"),
+  })
+  .passthrough();
 
-export const StageFormRowSchema = z.object({
-  fields: z
-    .array(StageFormFieldSchema)
-    .min(1)
-    .describe(
-      "Fields sitting together on this line (1, 2, or 3 fields in a row)",
-    ),
-});
+const StageDeleteRecordSchema = z
+  .object({
+    entityType: z
+      .string()
+      .describe("Type of entity to remove ('budget', 'expense', 'transaction', 'savingGoal', 'debt')"),
+    entityId: z.string().describe("ID of the record to delete"),
+    entityName: z
+      .string()
+      .describe("Human-readable title/name of the record for confirmation"),
+  })
+  .passthrough();
 
-export const StageFormTableSchema = z.object({
-  headers: z
-    .array(z.string())
-    .describe(
-      "Table column headers (e.g. ['क्रमांक', 'शैक्षिक योग्यता', 'उत्तीर्ण वर्ष', 'पूर्णांक', 'प्राप्तांक', 'प्रतिशत', 'बोर्ड'])",
-    ),
-  rows: z
-    .array(z.array(z.union([z.string(), z.number()])))
-    .describe("Array of table row cell values"),
-});
+const GetRecentFilesSchema = z
+  .object({
+    fileId: z
+      .string()
+      .optional()
+      .describe(
+        "Optional fileId or filename of the uploaded file to read/inspect (pass 'latest' to inspect the most recently uploaded file). If omitted, returns the latest 5 uploaded files in this conversation.",
+      ),
+    query: z
+      .string()
+      .optional()
+      .describe(
+        "Optional specific question or extraction goal for this file (e.g. 'Extract total marks', 'Check GST breakdown', 'Summarize key points'). If omitted, extracts the complete content.",
+      ),
+  })
+  .passthrough();
 
-export const StageFormSectionSchema = z.object({
-  title: z
-    .string()
-    .optional()
-    .describe(
-      "Clean plain section heading (e.g. '1. Branch Particulars', '2. Applicant & Promoter Identity', '3. Credit Facility Request'). NEVER use brackets, pipes, dashes or decorative symbols like '—[ ... ]—' or '|-'.",
-    ),
-  description: z
-    .string()
-    .optional()
-    .describe("Brief subtitle or description for this section"),
-  columns: z
-    .number()
-    .optional()
-    .default(2)
-    .describe("Default column count for the section (1, 2, or 3)"),
-  photoBox: z
-    .object({
-      label: z
-        .string()
-        .optional()
-        .default("फ़ोटो / Passport Photo")
-        .describe("Photo box label"),
-      url: z.string().optional().describe("Optional photo URL if available"),
-    })
-    .optional()
-    .describe("Optional passport photo box on the right of the section"),
-  rows: z
-    .array(StageFormRowSchema)
-    .optional()
-    .describe("List of rows in this section. Each row holds 1, 2, or 3 fields"),
-  table: StageFormTableSchema.optional().describe(
-    "Optional embedded sub-table for qualifications, marksheets, or financial breakdown",
-  ),
-  fields: z
-    .array(StageFormFieldSchema)
-    .optional()
-    .describe("Fallback flat list of fields in this section"),
-});
-
-export const StageFormThemeSchema = z.object({
-  primaryColor: z
-    .string()
-    .optional()
-    .describe(
-      "Bank/Scheme brand color (e.g. '#1E3A8A' for SBI, '#15803D' for Agriculture, '#C2410C' for PMEGP)",
-    ),
-  pageBg: z
-    .string()
-    .optional()
-    .describe("Paper sheet background tint (e.g. '#FFFFFF', '#FAF8F5')"),
-  borderColor: z
-    .string()
-    .optional()
-    .describe("Border color for table grid lines (e.g. '#CBD5E1')"),
-});
-
-export const StageFormSchema = z.object({
-  targetArtifactId: z
-    .string()
-    .optional()
-    .describe(
-      "Optional ID or index (e.g. 'art_1' or '1') of an existing form to update in-place instead of creating a new duplicate",
-    ),
-  title: z
-    .string()
-    .describe(
-      "Form title, e.g. 'MSME Business Loan Application Form' or 'GOVT ITI Registration Form'",
-    ),
-  documentBadge: z
-    .string()
-    .optional()
-    .describe(
-      "Official document code/badge (e.g. 'FORM NO. 1 • PMEGP', 'UP ITI REGISTRATION')",
-    ),
-  description: z
-    .string()
-    .optional()
-    .describe("Subtitle, summary or instructions for the form"),
-  submitLabel: z
-    .string()
-    .optional()
-    .default("Approve & Submit")
-    .describe("Label on the primary action button"),
-  formType: z
-    .string()
-    .optional()
-    .describe(
-      "Form category or domain, e.g. 'loan_application', 'subsidy_registration', 'vendor_kyc', 'custom'",
-    ),
-  theme: StageFormThemeSchema.optional().describe(
-    "Optional AI-driven styling theme",
-  ),
-  sections: z
-    .array(StageFormSectionSchema)
-    .min(1)
-    .describe("Array of form sections containing dynamic interactive fields"),
-});
-
-export const StageDocumentThemeSchema = z.object({
-  pageBg: z
-    .string()
-    .optional()
-    .describe("Background color (e.g. '#FFFFFF', '#FAF8F5')"),
-  primaryColor: z
-    .string()
-    .optional()
-    .describe(
-      "Primary highlight/accent color (e.g. '#1E3A8A', '#15803D', '#C2410C')",
-    ),
-  textColor: z.string().optional().describe("Text color (e.g. '#0F172A')"),
-  borderColor: z
-    .string()
-    .optional()
-    .describe("Border tint for tables/boxes (e.g. '#E2E8F0')"),
-});
-
-export const StageDocumentSchema = z.object({
-  targetArtifactId: z
-    .string()
-    .optional()
-    .describe("Optional ID of an existing document to update in place"),
-  title: z
-    .string()
-    .describe(
-      "Title of the document (e.g. 'Wholesale Fertilizer Price Catalog', 'Mudra vs PMEGP Comparison Matrix', 'Official Trade Agreement')",
-    ),
-  docType: z
-    .enum([
-      "catalog",
-      "table",
-      "report",
-      "guide",
-      "agreement",
-      "invoice",
-      "other",
-    ])
-    .default("catalog")
-    .describe("Document category"),
-  summary: z
-    .string()
-    .optional()
-    .describe("Brief 1-sentence summary of the document"),
-  theme: StageDocumentThemeSchema.optional().describe(
-    "AI-driven visual styling theme matching domain",
-  ),
-  content: z
-    .string()
-    .describe(
-      "Full markdown text containing GitHub-Flavored Markdown tables, headings, bold prices, badges, and terms",
-    ),
-});
-
-const GetArtifactsSchema = z.object({
-  artifactType: z
-    .enum([
-      "all",
-      "form",
-      "document",
-      "chart",
-      "budget",
-      "expense",
-      "transaction",
-      "saving_goal",
-      "debt",
-    ])
-    .optional()
-    .default("all")
-    .describe(
-      "Filter by artifact type ('form', 'document', 'chart', 'budget', 'expense', 'transaction', 'saving_goal', 'debt', or 'all')",
-    ),
-  limit: z
-    .number()
-    .optional()
-    .default(10)
-    .describe("Max number of recent artifacts to retrieve (defaults to 10)"),
-});
-
-const StageDeleteRecordSchema = z.object({
-  entityType: z
-    .enum(["budget", "expense", "transaction", "savingGoal", "debt"])
-    .describe("Type of entity to remove"),
-  entityId: z.string().describe("ID of the record to delete"),
-  entityName: z
-    .string()
-    .describe("Human-readable title/name of the record for confirmation"),
-});
-
-const GetRecentFilesSchema = z.object({
-  fileId: z
-    .string()
-    .optional()
-    .describe(
-      "Optional fileId or filename of the uploaded file to read/inspect (pass 'latest' to inspect the most recently uploaded file). If omitted, returns the latest 5 uploaded files in this conversation.",
-    ),
-  query: z
-    .string()
-    .optional()
-    .describe(
-      "Optional specific question or extraction goal for this file (e.g. 'Extract total marks', 'Check GST breakdown', 'Summarize key points'). If omitted, extracts the complete content.",
-    ),
-});
-
-const UpdateBusinessProfileSchema = z.object({
-  businessName: z
-    .string()
-    .optional()
-    .describe("Name of the user's business, shop, or farm"),
-  category: z
-    .string()
-    .optional()
-    .describe(
-      "Business sector or trade category (e.g. Bakery, APMC Mandi Wholesale Trader, Grocery, Handloom, Dairy)",
-    ),
-  city: z
-    .string()
-    .optional()
-    .describe("City or town (e.g. Bangalore, Nashik, Pune, Jaipur, Indore)"),
-  district: z
-    .string()
-    .optional()
-    .describe(
-      "Hyper-local district or catchment area (e.g. Indiranagar, Bangalore; Lasalgaon, Nashik)",
-    ),
-  monthlyTurnover: z
-    .string()
-    .optional()
-    .describe(
-      "Estimated monthly revenue or turnover (e.g. ₹4,50,000 or ₹15 Lakhs)",
-    ),
-});
+const UpdateBusinessProfileSchema = z
+  .object({
+    businessName: z
+      .string()
+      .optional()
+      .describe("Name of the user's business, shop, or farm"),
+    category: z
+      .string()
+      .optional()
+      .describe(
+        "Business sector or trade category (e.g. Bakery, APMC Mandi Wholesale Trader, Grocery, Handloom, Dairy)",
+      ),
+    city: z
+      .string()
+      .optional()
+      .describe("City or town (e.g. Bangalore, Nashik, Pune, Jaipur, Indore)"),
+    district: z
+      .string()
+      .optional()
+      .describe(
+        "Hyper-local district or catchment area (e.g. Indiranagar, Bangalore; Lasalgaon, Nashik)",
+      ),
+    state: z.string().optional().describe("State or Union Territory"),
+    pincode: z.string().optional().describe("6-digit postal pincode"),
+    monthlyTurnover: z
+      .string()
+      .optional()
+      .describe(
+        "Estimated monthly revenue or turnover (e.g. ₹4,50,000 or ₹15 Lakhs)",
+      ),
+    applicantCategory: z
+      .string()
+      .optional()
+      .describe("Demographic group: Women, SC/ST, General, OBC, Minority"),
+    areaType: z
+      .enum(["Rural", "Urban", "Semi-Urban"])
+      .optional()
+      .describe("Rural vs Urban business location"),
+    businessStage: z
+      .enum(["New", "Existing", "Expansion"])
+      .optional()
+      .describe("Business operating status: new setup vs existing vs expansion"),
+    hasGst: z.boolean().optional().describe("GST registration status"),
+    udyamNumber: z.string().optional().describe("Udyam MSME registration number"),
+  })
+  .passthrough();
 
 function makeEmitter(
   ctx: ToolContext | undefined,
@@ -644,6 +844,81 @@ function makeEmitter(
   };
 }
 
+function getStagedArtifactsByType(
+  conversationId: string | undefined,
+  targetType: string,
+): any[] {
+  if (!conversationId) return [];
+  const messages = chatStore.getMessages(conversationId);
+  const items: any[] = [];
+  const seenIds = new Set<string>();
+
+  for (let mIdx = messages.length - 1; mIdx >= 0; mIdx--) {
+    const msg = messages[mIdx];
+    let toolCallsList = msg.toolCalls;
+    if (typeof toolCallsList === "string") {
+      try {
+        toolCallsList = JSON.parse(toolCallsList);
+      } catch {
+        toolCallsList = undefined;
+      }
+    }
+    if (!toolCallsList || !Array.isArray(toolCallsList)) continue;
+
+    for (let i = toolCallsList.length - 1; i >= 0; i--) {
+      let tc: any = toolCallsList[i];
+      if (typeof tc === "string") {
+        try {
+          tc = JSON.parse(tc);
+        } catch {
+          continue;
+        }
+      }
+      if (!tc) continue;
+      const toolName = tc.toolName || tc.name;
+      const res =
+        (typeof tc.result === "string"
+          ? (() => {
+              try {
+                return JSON.parse(tc.result);
+              } catch {
+                return null;
+              }
+            })()
+          : tc.result) || {};
+
+      const matchesType =
+        (targetType === "budget" &&
+          (toolName === "stageBudget" || res.artifactType === "budget")) ||
+        (targetType === "expense" &&
+          (toolName === "stageExpense" || res.artifactType === "expense")) ||
+        (targetType === "transaction" &&
+          (toolName === "stageTransaction" ||
+            res.artifactType === "transaction")) ||
+        (targetType === "saving_goal" &&
+          (toolName === "stageSavingsGoal" ||
+            res.artifactType === "saving_goal" ||
+            res.artifactType === "savinggoal")) ||
+        (targetType === "debt" &&
+          (toolName === "stageDebt" || res.artifactType === "debt"));
+
+      if (matchesType) {
+        const payload = res.data || res.artifact || tc.args;
+        const id =
+          payload?.id ||
+          res.artifactId ||
+          tc.args?.targetArtifactId ||
+          `rec_${items.length + 1}`;
+        if (!seenIds.has(id)) {
+          seenIds.add(id);
+          items.push(payload);
+        }
+      }
+    }
+  }
+  return items;
+}
+
 export function getAgentTools(ctx?: ToolContext) {
   const userId = ctx?.userId;
   const conversationId = ctx?.conversationId;
@@ -656,22 +931,12 @@ export function getAgentTools(ctx?: ToolContext) {
       description:
         "Update the active business persona, trade sector, and hyper-local location context (persisted in client IndexedDB memory) whenever the user mentions what business they run, want to open, or where they are located. Ground future SWOT, competitor scans, and APMC rates to this.",
       inputSchema: UpdateBusinessProfileSchema,
-      execute: async ({
-        businessName,
-        category,
-        city,
-        district,
-        monthlyTurnover,
-      }) => {
+      execute: async (args) => {
         return {
           success: true,
-          message: `Saved active business context: ${businessName || "Enterprise"} (${category || "Trade"}) in ${district || city || "Target Area"}. Grounding all scans to this catchment.`,
+          message: `Saved active business context: ${args.businessName || "Enterprise"} (${args.category || "Trade"}) in ${args.district || args.city || args.state || "Target Area"}. Grounding all scans to this catchment.`,
           profile: {
-            businessName: businessName || "",
-            category: category || "",
-            city: city || "",
-            district: district || city || "",
-            monthlyTurnover: monthlyTurnover || "",
+            ...args,
             source: "auto_extracted",
           },
         };
@@ -971,7 +1236,7 @@ export function getAgentTools(ctx?: ToolContext) {
     // ─────────────────────────────────────────────────────────────
     getMandiRates: tool({
       description:
-        "Fetches live, real-time wholesale APMC market prices, daily arrivals, and modal rates from data.gov.in / Agmarknet with autonomous live web search fallback across all Indian districts and commodities (supports Hindi and regional names).",
+        "FAST DIRECT TOOL ONLY: Quickly fetches live APMC wholesale market prices from data.gov.in / Agmarknet for fast, simple conversational answers without opening multi-agent dossier tabs. STRICT MUTUAL EXCLUSIVITY: If you are calling the full sub-agent 'getMandiArbitrage', DO NOT call this tool (and vice versa). Never call both!",
       inputSchema: MandiRatesSchema,
       execute: async ({
         commodity: rawCommodity,
@@ -1088,15 +1353,11 @@ export function getAgentTools(ctx?: ToolContext) {
 
           return {
             success: true,
-            provider: "SerpApi Grounding Engine",
+            provider: "SerpApi Google Search",
             query,
-            results: [
-              {
-                title: `Trade Intelligence: ${query}`,
-                url: "https://msme.gov.in",
-                snippet: `Verified guidelines and official notices relating to ${query}.`,
-              },
-            ],
+            count: 0,
+            results: [],
+            message: `No live search results found for "${query}".`,
           };
         } catch (err: any) {
           return {
@@ -1412,6 +1673,12 @@ ${(result.data?.recommendedActions || []).map((a) => `> • ${a}`).join("\n")}`;
         category,
         riskLevel,
         bypassCache,
+        spaceAvailableSqFt,
+        powerConnectivity,
+        salesChannel,
+        entrepreneurExperience,
+        manpowerAvailable,
+        preferredSubsidies,
       }) => {
         const result = await predictDistrictBusinessesIntelligence({
           district,
@@ -1421,6 +1688,12 @@ ${(result.data?.recommendedActions || []).map((a) => `> • ${a}`).join("\n")}`;
           riskLevel,
           userId,
           bypassCache,
+          spaceAvailableSqFt,
+          powerConnectivity,
+          salesChannel,
+          entrepreneurExperience,
+          manpowerAvailable,
+          preferredSubsidies,
         });
 
         const cards = result.cards || [];
@@ -1472,232 +1745,214 @@ ${cards.map((c) => `**${c.title}**: ${c.whyInThisDistrict}\n- *Subsidy:* ${(c.ma
     // ─────────────────────────────────────────────────────────────
     getGovtSchemes: tool({
       description:
-        "Evaluates and matches verified central and state credit and subsidy schemes (PM Mudra, PM SVANidhi, PMEGP, Stand-Up India, PM Vishwakarma).",
+        "FAST DIRECT TOOL ONLY: Quickly queries official government portals and guidelines via Google search for any central or state credit or subsidy scheme (e.g. PM Mudra, PMEGP, PM SVANidhi, Stand-Up India, PMFME, State subsidies). STRICT MUTUAL EXCLUSIVITY: If you are calling the full sub-agent 'evaluateGovtSchemes', DO NOT call this tool (and vice versa). Never call both!",
       inputSchema: SchemeEligibilitySchema,
-      execute: async ({ schemeName, annualTurnover, loanAmountRequested }) => {
-        const userTurnover = annualTurnover || 1200000;
+      execute: async (params) => {
+        const {
+          schemeName,
+          query: specificQuery,
+          annualTurnover,
+          loanAmountRequested,
+          businessSector,
+          state,
+          district,
+          applicantCategory,
+          areaType,
+          businessStage,
+        } = params;
 
-        if (schemeName === "PM_MUDRA") {
-          const category =
-            userTurnover < 500000
-              ? "Shishu (up to ₹50,000)"
-              : userTurnover < 2500000
-                ? "Kishore (₹50k - ₹5 Lakhs)"
-                : "Tarun (₹5 Lakhs - ₹10 Lakhs)";
-          return {
-            success: true,
-            scheme: "PM Mudra Yojana (PMMY)",
-            recommendedCategory: category,
-            maxLoanAmount: category.startsWith("Shishu")
-              ? "₹50,000"
-              : category.startsWith("Kishore")
-                ? "₹5,00,000"
-                : "₹10,00,000",
-            collateral: "Zero collateral (CGFMU Guarantee cover)",
-            interestRate: "8.40% - 11.15% p.a.",
-            subsidy: "Zero processing fee on Shishu & Kishore tranches",
-            requiredDocs: [
-              "Udyam Aadhar",
-              "6-Month Bank / UPI Statement",
-              "PAN & Aadhaar Card",
-            ],
-          };
-        }
+        const queryTerms = [
+          schemeName,
+          specificQuery,
+          businessSector,
+          applicantCategory ? `${applicantCategory} category` : null,
+          areaType,
+          district,
+          state,
+          businessStage,
+          "scheme eligibility subsidy guidelines official portal site:gov.in OR site:nic.in OR site:in",
+        ]
+          .filter(Boolean)
+          .join(" ");
 
-        if (schemeName === "PM_SVANIDHI") {
-          return {
-            success: true,
-            scheme: "PM SVANidhi (Micro Seller & Street Vendor Credit)",
-            tranche1: "₹10,000 (7% interest subsidy on timely repayment)",
-            tranche2: "₹20,000 on successful 1st loan tenure",
-            tranche3: "₹50,000 on 2nd tranche completion",
-            cashback: "Up to ₹1,200/year on digital UPI transactions",
-            requiredDocs: [
-              "Vending LOR / ULB Certificate",
-              "Aadhaar Card",
-              "Bank Account",
-            ],
-          };
-        }
-
-        if (schemeName === "PMEGP") {
-          return {
-            success: true,
-            scheme: "Prime Minister Employment Generation Programme (PMEGP)",
-            maxProjectCost:
-              "Manufacturing: ₹50 Lakhs | Service/Trading: ₹20 Lakhs",
-            subsidyRate: "15% - 35% Capital Subsidy by Ministry of MSME",
-            ownContribution: "Only 5% to 10% project cost required by borrower",
-            requiredDocs: [
-              "Detailed Project Report (DPR)",
-              "EDP Training Certificate",
-              "Udyam Aadhar",
-            ],
-          };
-        }
-
+        const searchResults = await searchGoogleWeb(queryTerms, 5);
         return {
           success: true,
-          scheme: "Stand-Up India Scheme",
-          maxLoan: "₹10 Lakhs to ₹1 Crore",
-          marginMoney: "Up to 15% state subsidy linkage",
-          requiredDocs: [
-            "Detailed Project Report",
-            "Past 2 Years Balance Sheet / ITR",
-          ],
+          ...params,
+          searchQueryUsed: queryTerms,
+          officialGuidelines: searchResults,
+          source: "Live Official Web Search (SerpApi)",
         };
       },
     }),
 
     // ─────────────────────────────────────────────────────────────
-    // 7. FINANCIAL STATE TOOLS (Clean State & Realistic Baselines)
+    // 7. FINANCIAL STATE TOOLS (Real Conversation-Staged Artifacts)
     // ─────────────────────────────────────────────────────────────
     getBudgets: tool({
       description:
-        "Retrieves active enterprise budget allocations and targets.",
-      inputSchema: z.object({}),
+        "Retrieves active enterprise budget allocations and targets staged in the current conversation.",
+      inputSchema: z.object({}).passthrough(),
       execute: async () => {
+        const stagedBudgets = getStagedArtifactsByType(conversationId, "budget");
         return {
           success: true,
-          budgets: [
-            {
-              id: "b_1",
-              name: "Monthly Operating Budget",
-              totalAmount: 180000,
-              items: [
-                { category: "Raw Materials / Stock", allocatedAmount: 110000 },
-                { category: "Rent & Utilities", allocatedAmount: 30000 },
-                { category: "Staff & Wages", allocatedAmount: 25000 },
-                { category: "Logistics & Transport", allocatedAmount: 15000 },
-              ],
-            },
-          ],
+          budgets: stagedBudgets,
+          count: stagedBudgets.length,
+          message:
+            stagedBudgets.length === 0
+              ? "No budget plans recorded yet in this session. You can create one using stageBudget."
+              : `Found ${stagedBudgets.length} active budget plan(s).`,
         };
       },
     }),
 
     getExpenses: tool({
-      description: "Retrieves logged business expenses and payments.",
-      inputSchema: z.object({
-        category: z.string().optional(),
-        limit: z.number().optional().default(10),
-      }),
-      execute: async ({ category }) => {
+      description:
+        "Retrieves logged business expenses and payments from the current conversation.",
+      inputSchema: z
+        .object({
+          category: z.string().optional(),
+          limit: z.number().optional().default(10),
+        })
+        .passthrough(),
+      execute: async ({ category, limit = 10 }) => {
+        const stagedExpenses = getStagedArtifactsByType(conversationId, "expense");
+        const filtered = category
+          ? stagedExpenses.filter((e) =>
+              (e.category || "").toLowerCase().includes(category.toLowerCase()),
+            )
+          : stagedExpenses;
+        const total = filtered.reduce(
+          (sum: number, e: any) => sum + (Number(e.amount) || 0),
+          0,
+        );
         return {
           success: true,
-          totalExpensesInList: 84000,
-          expenses: [
-            {
-              id: "exp_1",
-              category: category || "Raw Materials",
-              amount: 45000,
-              date: new Date().toISOString().split("T")[0],
-              vendor: "Wholesale Mandi Supplier",
-              paymentMethod: "UPI",
-              description: "Weekly inventory replenishment",
-            },
-            {
-              id: "exp_2",
-              category: "Logistics",
-              amount: 8500,
-              date: new Date().toISOString().split("T")[0],
-              vendor: "Tempo Transport",
-              paymentMethod: "CASH",
-              description: "Stock transportation",
-            },
-          ],
+          totalExpensesInList: total,
+          expenses: filtered.slice(0, limit),
+          count: filtered.length,
+          message:
+            filtered.length === 0
+              ? "No expenses logged yet in this session. You can log one using stageExpense."
+              : `Found ${filtered.length} logged expense(s).`,
         };
       },
     }),
 
     getTransactions: tool({
       description:
-        "Retrieves master ledger transactions (Income, Expense, Transfers).",
-      inputSchema: z.object({
-        type: z
-          .enum([
-            "INCOME",
-            "EXPENSE",
-            "TRANSFER",
-            "DEBT_PAYMENT",
-            "SAVING",
-            "OTHER",
-          ])
-          .optional(),
-        limit: z.number().optional().default(10),
-      }),
-      execute: async ({ type }) => {
+        "Retrieves master ledger transactions (Income, Expense, Transfers) staged in the current conversation.",
+      inputSchema: z
+        .object({
+          type: z
+            .string()
+            .optional()
+            .describe("Transaction type filter (INCOME, EXPENSE, TRANSFER, DEBT_PAYMENT, SAVING, OTHER)"),
+          limit: z.number().optional().default(10),
+        })
+        .passthrough(),
+      execute: async ({ type, limit = 10 }) => {
+        const stagedTx = getStagedArtifactsByType(conversationId, "transaction");
+        const filtered = type
+          ? stagedTx.filter(
+              (t) => (t.type || "").toUpperCase() === type.toUpperCase(),
+            )
+          : stagedTx;
         return {
           success: true,
-          transactions: [
-            {
-              id: "tx_1",
-              type: type || "INCOME",
-              amount: 12500,
-              date: new Date().toISOString().split("T")[0],
-              category: "Retail Sales",
-              description: "Daily customer UPI settlements",
-            },
-          ],
+          transactions: filtered.slice(0, limit),
+          count: filtered.length,
+          message:
+            filtered.length === 0
+              ? "No transactions recorded yet in this session. You can record one using stageTransaction."
+              : `Found ${filtered.length} transaction(s).`,
         };
       },
     }),
 
     getSavingsGoals: tool({
-      description: "Retrieves active savings targets and accumulated funds.",
-      inputSchema: z.object({}),
+      description:
+        "Retrieves active savings targets and accumulated funds staged in the current conversation.",
+      inputSchema: z.object({}).passthrough(),
       execute: async () => {
+        const stagedGoals = getStagedArtifactsByType(
+          conversationId,
+          "saving_goal",
+        );
         return {
           success: true,
-          goals: [
-            {
-              id: "sg_1",
-              name: "Festival Season Working Capital Buffer",
-              targetAmount: 200000,
-              currentAmount: 135000,
-              targetDate: "2026-11-01",
-            },
-          ],
+          goals: stagedGoals,
+          count: stagedGoals.length,
+          message:
+            stagedGoals.length === 0
+              ? "No savings goals established yet in this session. You can create one using stageSavingsGoal."
+              : `Found ${stagedGoals.length} savings goal(s).`,
         };
       },
     }),
 
     getDebts: tool({
-      description: "Retrieves active loan liabilities and EMI schedules.",
-      inputSchema: z.object({}),
+      description:
+        "Retrieves active loan liabilities and EMI schedules staged in the current conversation.",
+      inputSchema: z.object({}).passthrough(),
       execute: async () => {
+        const stagedDebts = getStagedArtifactsByType(conversationId, "debt");
         return {
           success: true,
-          debts: [
-            {
-              id: "debt_1",
-              lender: "State Bank of India (MSME Branch)",
-              type: "WORKING_CAPITAL",
-              totalAmount: 500000,
-              amountOutStanding: 320000,
-              interestRate: "9.25% p.a.",
-              emiAmount: "₹14,500/mo",
-              status: "ACTIVE",
-            },
-          ],
+          debts: stagedDebts,
+          count: stagedDebts.length,
+          message:
+            stagedDebts.length === 0
+              ? "No active loan liabilities or debt records found in this session. You can log one using stageDebt."
+              : `Found ${stagedDebts.length} active liability record(s).`,
         };
       },
     }),
 
     getBusinessProfile: tool({
       description:
-        "Retrieves registered enterprise profile and trade particulars.",
-      inputSchema: z.object({}),
+        "Retrieves registered enterprise profile and trade particulars from the current conversation context.",
+      inputSchema: z.object({}).passthrough(),
       execute: async () => {
+        let profile: any = null;
+        if (conversationId) {
+          const messages = chatStore.getMessages(conversationId);
+          for (let mIdx = messages.length - 1; mIdx >= 0; mIdx--) {
+            const msg = messages[mIdx];
+            let toolCallsList = msg.toolCalls;
+            if (typeof toolCallsList === "string") {
+              try {
+                toolCallsList = JSON.parse(toolCallsList);
+              } catch {}
+            }
+            if (Array.isArray(toolCallsList)) {
+              for (const tc of toolCallsList) {
+                if ((tc.toolName || tc.name) === "updateBusinessContext") {
+                  const res =
+                    typeof tc.result === "string"
+                      ? JSON.parse(tc.result || "{}")
+                      : tc.result;
+                  profile = res?.profile || tc.args;
+                  break;
+                }
+              }
+            }
+            if (profile) break;
+          }
+        }
+        if (!profile) {
+          return {
+            success: true,
+            hasProfile: false,
+            message:
+              "No business profile established yet for this session. Ask the user for their business name, category, or location, and persist it with updateBusinessContext.",
+          };
+        }
         return {
           success: true,
-          businessName: "VyaparSetu Trade Enterprise",
-          category: "Retail / Micro-Enterprise",
-          industry: "Trade & Commerce",
-          city: "Bangalore",
-          state: "Karnataka",
-          annualRevenue: "₹24,00,000",
-          monthlyExpenses: "₹1,40,000",
+          hasProfile: true,
+          ...profile,
         };
       },
     }),
@@ -1800,14 +2055,16 @@ ${cards.map((c) => `**${c.title}**: ${c.whyInThisDistrict}\n- *Subsidy:* ${(c.ma
     newsSearch: tool({
       description:
         "Searches Google News via SerpApi for breaking commodity prices, regulatory changes, or trade updates.",
-      inputSchema: z.object({
-        query: z.string().describe("News topic or query to search"),
-        numResults: z
-          .number()
-          .optional()
-          .default(5)
-          .describe("Number of news articles to retrieve"),
-      }),
+      inputSchema: z
+        .object({
+          query: z.string().describe("News topic or query to search"),
+          numResults: z
+            .number()
+            .optional()
+            .default(5)
+            .describe("Number of news articles to retrieve"),
+        })
+        .passthrough(),
       execute: async ({ query, numResults }) => {
         const news = await searchGoogleNews(query, numResults);
         return {
@@ -1821,33 +2078,55 @@ ${cards.map((c) => `**${c.title}**: ${c.whyInThisDistrict}\n- *Subsidy:* ${(c.ma
     evaluateCreditAndEMI: tool({
       description:
         "Calculates monthly EMI, amortization schedule, debt burden, and compares live bank loan interest rates (SBI, HDFC, Mudra) scraped via SerpApi.",
-      inputSchema: z.object({
-        amount: z
-          .number()
-          .describe("Requested loan principal amount in INR (e.g. 500000)"),
-        tenureYears: z
-          .number()
-          .optional()
-          .default(3)
-          .describe("Loan tenure in years (e.g. 1 to 7)"),
-        interestRate: z
-          .number()
-          .optional()
-          .default(10.5)
-          .describe("Annual interest rate percentage (e.g. 10.5)"),
-        monthlyRevenue: z
-          .number()
-          .optional()
-          .describe(
-            "User's monthly revenue/turnover in INR for burden calculation",
-          ),
-        purpose: z
-          .string()
-          .optional()
-          .describe(
-            "Purpose of loan (e.g. inventory, machinery, working capital)",
-          ),
-      }),
+      inputSchema: z
+        .object({
+          amount: z
+            .number()
+            .describe("Requested loan principal amount in INR (e.g. 500000)"),
+          tenureYears: z
+            .number()
+            .optional()
+            .default(3)
+            .describe("Loan tenure in years (e.g. 1 to 7)"),
+          interestRate: z
+            .number()
+            .optional()
+            .default(10.5)
+            .describe("Annual interest rate percentage (e.g. 10.5)"),
+          monthlyRevenue: z
+            .number()
+            .optional()
+            .describe(
+              "User's monthly revenue/turnover in INR for burden calculation",
+            ),
+          existingMonthlyEmi: z
+            .number()
+            .optional()
+            .describe("Current monthly EMI obligations for FOIR debt-burden calculation"),
+          purpose: z
+            .string()
+            .optional()
+            .describe(
+              "Purpose of loan (e.g. inventory, machinery, working capital, expansion)",
+            ),
+          creditScoreCategory: z
+            .enum(["Excellent_750+", "Good_700-750", "Average_650-700", "New_To_Credit"])
+            .optional()
+            .describe("Applicant credit score tier"),
+          collateralAvailable: z
+            .string()
+            .optional()
+            .describe("Collateral status: CGTMSE zero-collateral, hypothecation, property mortgage"),
+          lenderPreference: z
+            .string()
+            .optional()
+            .describe("Preferred lender: Public Sector Bank, Private Bank, Mudra NBFC, MFI"),
+          subventionEligible: z
+            .boolean()
+            .optional()
+            .describe("Whether eligible for prompt repayment or AIF interest subsidy"),
+        })
+        .passthrough(),
       execute: async (params, context: any) => {
         const toolCallId =
           context?.toolCallId || context?.id || `call_${Date.now()}_credit`;
@@ -1876,29 +2155,43 @@ ${cards.map((c) => `**${c.title}**: ${c.whyInThisDistrict}\n- *Subsidy:* ${(c.ma
     runSWOTScan: tool({
       description:
         "Pulls local competitor density via SerpApi Google Maps and live market trends to build an authentic 4-quadrant SWOT matrix.",
-      inputSchema: z.object({
-        category: z
-          .string()
-          .describe(
-            "Business sector or category (e.g. 'Biryani Cloud Kitchen', 'Kirana', 'Automobile Workshop')",
-          ),
-        location: z
-          .string()
-          .optional()
-          .describe(
-            "Target neighborhood, area, or city (e.g. 'Koramangala, Bangalore' or 'Indore')",
-          ),
-        radiusKm: z
-          .number()
-          .optional()
-          .default(5)
-          .describe("Catchment radius in kilometers to scan (e.g. 2, 5, 10)"),
-        lat: z.number().optional().describe("Latitude coordinate if available"),
-        lon: z
-          .number()
-          .optional()
-          .describe("Longitude coordinate if available"),
-      }),
+      inputSchema: z
+        .object({
+          category: z
+            .string()
+            .describe(
+              "Business sector or category (e.g. 'Biryani Cloud Kitchen', 'Kirana', 'Automobile Workshop')",
+            ),
+          location: z
+            .string()
+            .optional()
+            .describe(
+              "Target neighborhood, area, or city (e.g. 'Koramangala, Bangalore' or 'Indore')",
+            ),
+          radiusKm: z
+            .number()
+            .optional()
+            .default(5)
+            .describe("Catchment radius in kilometers to scan (e.g. 2, 5, 10)"),
+          lat: z.number().optional().describe("Latitude coordinate if available"),
+          lon: z
+            .number()
+            .optional()
+            .describe("Longitude coordinate if available"),
+          userBusinessName: z
+            .string()
+            .optional()
+            .describe("User's own business or shop name to benchmark against rivals"),
+          priceTier: z
+            .enum(["Budget", "Mid-Range", "Premium"])
+            .optional()
+            .describe("Target price and quality segment"),
+          specificThreatsOrStrengths: z
+            .string()
+            .optional()
+            .describe("Specific known competitive advantages or challenges"),
+        })
+        .passthrough(),
       execute: async (params, context: any) => {
         const toolCallId =
           context?.toolCallId || context?.id || `call_${Date.now()}_swot`;
@@ -1927,24 +2220,34 @@ ${cards.map((c) => `**${c.title}**: ${c.whyInThisDistrict}\n- *Subsidy:* ${(c.ma
     scanCatchmentRadar: tool({
       description:
         "Scans local competitor radar using SerpApi Google Maps with exact distances, user ratings, price tiers, and threat assessments.",
-      inputSchema: z.object({
-        category: z
-          .string()
-          .describe(
-            "Commercial business type to search (e.g. 'Coffee Shop', 'Hardware Store')",
-          ),
-        location: z
-          .string()
-          .optional()
-          .describe("Neighborhood, street, or city"),
-        radiusKm: z
-          .number()
-          .optional()
-          .default(5)
-          .describe("Catchment radius in kilometers"),
-        lat: z.number().optional().describe("Latitude coordinate"),
-        lon: z.number().optional().describe("Longitude coordinate"),
-      }),
+      inputSchema: z
+        .object({
+          category: z
+            .string()
+            .describe(
+              "Commercial business type to search (e.g. 'Coffee Shop', 'Hardware Store')",
+            ),
+          location: z
+            .string()
+            .optional()
+            .describe("Neighborhood, street, or city"),
+          radiusKm: z
+            .number()
+            .optional()
+            .default(5)
+            .describe("Catchment radius in kilometers"),
+          lat: z.number().optional().describe("Latitude coordinate"),
+          lon: z.number().optional().describe("Longitude coordinate"),
+          userBusinessName: z
+            .string()
+            .optional()
+            .describe("User's own business name to benchmark directly against competitors"),
+          keywordFilter: z
+            .string()
+            .optional()
+            .describe("Specific keyword or specialty filter for places scan"),
+        })
+        .passthrough(),
       execute: async (params) => {
         const shops = await searchCatchmentShops(params);
         const avgRating =
@@ -2146,17 +2449,36 @@ ${shops.map((s) => `| **${s.name}** | ${s.distance} | ★ ${s.rating || "4.0"} (
 
     getMandiArbitrage: tool({
       description:
-        "Evaluates live APMC yard prices and calculates inter-mandi price spreads and transport viability.",
-      inputSchema: z.object({
-        commodity: z
-          .string()
-          .optional()
-          .describe(
-            "Crop or commodity name (e.g. 'Mustard', 'Wheat', 'Onion', 'Soybean')",
-          ),
-        district: z.string().optional().describe("District or mandi yard name"),
-        state: z.string().optional().describe("State name"),
-      }),
+        "FULL SUB-AGENT TOOL: Deeply evaluates live APMC yard prices, calculates inter-mandi price spreads, transport viability, Recharts graphs, and dedicated Swarm dossier tabs. For multiple commodities (e.g. Onion and Wheat), call this tool once for each commodity in parallel. STRICT MUTUAL EXCLUSIVITY: If you call 'getMandiArbitrage', DO NOT call the direct tool 'getMandiRates' (and vice versa). Never call both!",
+      inputSchema: z
+        .object({
+          commodity: z
+            .string()
+            .optional()
+            .describe(
+              "Crop or commodity name (e.g. 'Mustard', 'Wheat', 'Onion', 'Soybean', 'Tomato', 'Paddy')",
+            ),
+          district: z.string().optional().describe("Source district or base mandi yard name"),
+          state: z.string().optional().describe("State name"),
+          variety: z.string().optional().describe("Specific variety (e.g. 'Lokwan', 'Hybrid', 'Red', 'Desi')"),
+          targetMarkets: z
+            .array(z.string())
+            .optional()
+            .describe("Target consumption mandis to compare against (e.g. ['Azadpur', 'Vashi', 'Bengaluru APMC'])"),
+          quantityQuintals: z
+            .number()
+            .optional()
+            .describe("Estimated trade lot size in quintals (for net arbitrage calculation)"),
+          transportCostPerQuintal: z
+            .number()
+            .optional()
+            .describe("Estimated freight and loading cost per quintal in INR"),
+          query: z
+            .string()
+            .optional()
+            .describe("Specific arbitrage question or market spread inquiry"),
+        })
+        .passthrough(),
       execute: async (params, context: any) => {
         const toolCallId =
           context?.toolCallId || context?.id || `call_${Date.now()}_mandi`;
@@ -2184,17 +2506,55 @@ ${shops.map((s) => `| **${s.name}** | ${s.distance} | ★ ${s.rating || "4.0"} (
 
     evaluateGovtSchemes: tool({
       description:
-        "Verifies live subsidy programs (PMEGP, Mudra, PM SVANidhi, CGTMSE) and generates an eligibility checklist.",
-      inputSchema: z.object({
-        businessSector: z
-          .string()
-          .optional()
-          .describe("Sector (e.g. 'Textiles', 'Food Processing', 'Retail')"),
-        investmentAmount: z
-          .number()
-          .optional()
-          .describe("Capital required or investment budget"),
-      }),
+        "FULL SUB-AGENT TOOL: Deeply evaluates live subsidy programs (PMEGP, Mudra, PM SVANidhi, CGTMSE) and generates comprehensive multi-scheme eligibility checklists and Swarm tabs. STRICT MUTUAL EXCLUSIVITY: If you call 'evaluateGovtSchemes', DO NOT call the direct tool 'getGovtSchemes' (and vice versa). Never call both!",
+      inputSchema: z
+        .object({
+          schemeName: z
+            .string()
+            .optional()
+            .describe(
+              "Specific scheme to evaluate (e.g. 'PMEGP', 'PM Mudra', 'PM SVANidhi', 'PMFME', 'Stand-Up India', or state program)",
+            ),
+          query: z
+            .string()
+            .optional()
+            .describe(
+              "Specific inquiry or focus (e.g. 'subsidy for women', 'documents checklist', 'JanSamarth registration', 'interest rate')",
+            ),
+          businessSector: z
+            .string()
+            .optional()
+            .describe("Sector (e.g. 'Textiles', 'Food Processing', 'Retail', 'Fabrication')"),
+          investmentAmount: z
+            .number()
+            .optional()
+            .describe("Capital required or investment budget in INR"),
+          annualTurnover: z
+            .number()
+            .optional()
+            .describe("Annual business turnover in INR"),
+          state: z
+            .string()
+            .optional()
+            .describe("State or UT of operation"),
+          district: z
+            .string()
+            .optional()
+            .describe("District or city"),
+          applicantCategory: z
+            .string()
+            .optional()
+            .describe("Beneficiary category: General, Women, SC/ST, OBC, Minority, Ex-Servicemen"),
+          areaType: z
+            .enum(["Rural", "Urban", "Semi-Urban"])
+            .optional()
+            .describe("Rural vs Urban business location"),
+          businessStage: z
+            .enum(["New", "Expansion", "Modernization"])
+            .optional()
+            .describe("New enterprise setup vs existing business expansion"),
+        })
+        .passthrough(),
       execute: async (params, context: any) => {
         const toolCallId =
           context?.toolCallId || context?.id || `call_${Date.now()}_schemes`;
@@ -2226,45 +2586,55 @@ ${shops.map((s) => `| **${s.name}** | ${s.distance} | ★ ${s.rating || "4.0"} (
     runCustomResearchAgent: tool({
       description:
         "Spawns an on-demand specialized domain research sub-agent tab (e.g. Cold Storage Machinery, FSSAI Licensing, APEDA Food Export, Machinery Capex, Solar Rooftop) with real-time SerpApi web grounding, dynamic markdown dossier, KPI metrics, comparison tables, and interactive calculator.",
-      inputSchema: z.object({
-        tabTitle: z
-          .string()
-          .describe(
-            "Concise tab title e.g. '❄️ Cold Storage', '📜 FSSAI Licensing', '⚡ Solar Rooftop', '📦 Packaging Machinery'",
-          ),
-        category: z
-          .string()
-          .describe(
-            "Specific commercial sector or equipment domain to research",
-          ),
-        query: z
-          .string()
-          .describe("Targeted search query for live SerpApi Google search"),
-        icon: z
-          .enum([
-            "factory",
-            "shield",
-            "truck",
-            "package",
-            "zap",
-            "scale",
-            "leaf",
-            "cpu",
-            "wrench",
-            "coins",
-          ])
-          .optional()
-          .default("factory")
-          .describe("Icon identifier for the tab header"),
-        investmentBudget: z
-          .number()
-          .optional()
-          .describe("Optional investment capital or budget in INR"),
-        spokenSummary: z
-          .string()
-          .optional()
-          .describe("1-sentence audio report for voice agent mode"),
-      }),
+      inputSchema: z
+        .object({
+          tabTitle: z
+            .string()
+            .describe(
+              "Concise tab title e.g. '❄️ Cold Storage', '📜 FSSAI Licensing', '⚡ Solar Rooftop', '📦 Packaging Machinery'",
+            ),
+          category: z
+            .string()
+            .describe(
+              "Specific commercial sector or equipment domain to research",
+            ),
+          query: z
+            .string()
+            .describe("Targeted search query for live SerpApi Google search"),
+          location: z
+            .string()
+            .optional()
+            .describe("Target geographical location or state"),
+          scaleOrCapacity: z
+            .string()
+            .optional()
+            .describe("Production capacity, machinery specs, or output scale (e.g. 5 tons/day, 50kW, 1000 units/hr)"),
+          icon: z
+            .enum([
+              "factory",
+              "shield",
+              "truck",
+              "package",
+              "zap",
+              "scale",
+              "leaf",
+              "cpu",
+              "wrench",
+              "coins",
+            ])
+            .optional()
+            .default("factory")
+            .describe("Icon identifier for the tab header"),
+          investmentBudget: z
+            .number()
+            .optional()
+            .describe("Optional investment capital or budget in INR"),
+          spokenSummary: z
+            .string()
+            .optional()
+            .describe("1-sentence audio report for voice agent mode"),
+        })
+        .passthrough(),
       execute: async (params, context: any) => {
         const toolCallId =
           context?.toolCallId || context?.id || `call_${Date.now()}_custom`;
