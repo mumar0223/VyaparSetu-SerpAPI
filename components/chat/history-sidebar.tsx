@@ -115,10 +115,10 @@ export function HistorySidebar({
               if (isMobileSheet) onToggle();
             }}
             className={cn(
-              "flex flex-1 h-9 items-center justify-center gap-2 rounded-xl px-3 text-[13px] font-semibold transition-all duration-200 cursor-pointer border shadow-2xs hover:scale-105 active:scale-100 hover:bg-emerald-50 hover:border-emerald-300 hover:text-emerald-700 hover:shadow-sm",
+              "flex flex-1 h-9 items-center justify-center gap-2 rounded-xl px-3 text-[13px] font-semibold transition-colors cursor-pointer border shadow-2xs",
               pathname === "/" && !activeChatId && activeView !== "enterprise"
                 ? "bg-mint-pale dark:bg-mint/15 text-forest dark:text-mint border-mint/40"
-                : "bg-cream dark:bg-muted text-forest dark:text-foreground border-sage/40 dark:border-border"
+                : "bg-cream dark:bg-muted hover:bg-mint-pale dark:hover:bg-muted/80 text-forest dark:text-foreground border-sage/40 dark:border-border"
             )}
           >
             <Plus className="size-4 text-forest dark:text-mint" />

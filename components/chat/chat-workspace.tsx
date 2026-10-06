@@ -2003,7 +2003,7 @@ function formatSmartChatTitle(rawText: string): string {
       )}
 
       {/* ── Top-Right Header: Language Dropdown + User Profile Button ── */}
-      <div className="fixed top-1.5 right-3 md:right-6 z-30 flex items-center gap-2 pointer-events-auto select-none">
+      <div className="fixed top-3 right-3 md:right-6 z-30 flex items-center gap-2 pointer-events-auto select-none">
         {/* Language Dropdown */}
         <LanguageSwitcher variant="brand" />
 
@@ -2113,8 +2113,8 @@ function formatSmartChatTitle(rawText: string): string {
               </h1>
 
               {/* Natural typographic subtitle (No artificial badge, no pulse circle) */}
-              <p className="text-xs sm:text-sm font-medium mb-1.5 leading-relaxed">
-                <span style={{ color: "#414142" }}>Autonomous Enterprise Intelligence Swarm</span>
+              <p className="text-xs sm:text-sm font-medium text-forest/80 dark:text-zinc-300 mb-1.5 leading-relaxed">
+                <span>Autonomous Enterprise Intelligence Swarm</span>
                 <span className="mx-2 text-forest/30 dark:text-zinc-600 font-normal">•</span>
                 <span className="text-forest dark:text-mint font-semibold">
                   Powered by SerpApi Real-Time Grounding
