@@ -58,7 +58,10 @@ export async function POST(req: NextRequest) {
           imageBuffer = Buffer.from(body.imageBase64, "base64");
           isCameraActive = true;
         } catch (e) {
-          console.warn("[voice/subagent-stream] Failed to parse base64 image:", e);
+          console.warn(
+            "[voice/subagent-stream] Failed to parse base64 image:",
+            e,
+          );
         }
       }
       if (typeof body.sharpnessScore === "number") {
@@ -88,20 +91,30 @@ export async function POST(req: NextRequest) {
         const history = chatStore.getMessages(conversationId).slice(-6);
         if (history.length) {
           chatHistoryMessages = history
-            .filter((m) => (m.content && m.content.trim()) || (Array.isArray(m.files) && m.files.length > 0))
+            .filter(
+              (m) =>
+                (m.content && m.content.trim()) ||
+                (Array.isArray(m.files) && m.files.length > 0),
+            )
             .map((m) => {
               const fileDesc =
                 Array.isArray(m.files) && m.files.length > 0
                   ? ` [Files: ${m.files.map((f: any) => (typeof f === "string" ? f : f?.name || f?.url)).join(", ")}]`
                   : "";
               return {
-                role: m.role === "assistant" ? ("assistant" as const) : ("user" as const),
+                role:
+                  m.role === "assistant"
+                    ? ("assistant" as const)
+                    : ("user" as const),
                 content: `${m.content || ""}${fileDesc}`.slice(0, 350),
               };
             });
         }
       } catch (hErr) {
-        console.warn("[voice/subagent-stream] Error fetching chat history:", hErr);
+        console.warn(
+          "[voice/subagent-stream] Error fetching chat history:",
+          hErr,
+        );
       }
     }
 
@@ -388,7 +401,10 @@ STRICT REGULATORY, SAFETY & PROHIBITED COMMERCE POLICY (MANDATORY):
           mediaType: imageMimeType || "image/jpeg",
         });
       } catch (e) {
-        console.warn("[voice/subagent-stream] Failed to add image to userParts:", e);
+        console.warn(
+          "[voice/subagent-stream] Failed to add image to userParts:",
+          e,
+        );
       }
     }
     if (audioBase64) {
@@ -399,15 +415,18 @@ STRICT REGULATORY, SAFETY & PROHIBITED COMMERCE POLICY (MANDATORY):
           mediaType: "audio/wav",
         });
       } catch (e) {
-        console.warn("[voice/subagent-stream] Failed to parse audio buffer:", e);
+        console.warn(
+          "[voice/subagent-stream] Failed to parse audio buffer:",
+          e,
+        );
       }
     }
     userParts.push({
       type: "text",
       text: imageBuffer
-        ? (query.trim()
-            ? `Please inspect this captured document image for request: "${query}". Fulfill the user's request accurately using multimodal vision and available tools.`
-            : "Please inspect this attached document image and process its details using available tools.")
+        ? query.trim()
+          ? `Please inspect this captured document image for request: "${query}". Fulfill the user's request accurately using multimodal vision and available tools.`
+          : "Please inspect this attached document image and process its details using available tools."
         : `Please execute the user's request: "${query}". Use the appropriate tools now.`,
     });
 
@@ -417,7 +436,9 @@ STRICT REGULATORY, SAFETY & PROHIBITED COMMERCE POLICY (MANDATORY):
         const sendEvent = (event: string, data: any) => {
           try {
             controller.enqueue(
-              encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`),
+              encoder.encode(
+                `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`,
+              ),
             );
           } catch {
             // controller closed
@@ -430,7 +451,8 @@ STRICT REGULATORY, SAFETY & PROHIBITED COMMERCE POLICY (MANDATORY):
           status: "working",
           activeTool: "research",
           description: `Starting autonomous execution for: "${query}"`,
-          spokenHint: "Maine aapka task shuru kar diya hai, screen par dekhte rahiye.",
+          spokenHint:
+            "Maine aapka task shuru kar diya hai, screen par dekhte rahiye.",
           progressPhase: "starting",
         });
 
@@ -444,10 +466,7 @@ STRICT REGULATORY, SAFETY & PROHIBITED COMMERCE POLICY (MANDATORY):
         const executedToolCalls: any[] = [];
         const abort = new AbortController();
         let finished = false;
-        const STAGE_TOOLS = new Set([
-          "stageForm",
-          "stageDocument",
-        ]);
+        const STAGE_TOOLS = new Set(["stageForm", "stageDocument"]);
 
         const SUBAGENT_TOOLS = new Set([
           "scanCatchmentRadar",
@@ -496,7 +515,8 @@ STRICT REGULATORY, SAFETY & PROHIBITED COMMERCE POLICY (MANDATORY):
                   status: "working",
                   activeTool: "webSearch",
                   description: `Searching official guidelines for: ${toolArgs.query || query}`,
-                  spokenHint: "Main abhi official portal par niyam aur zaroori documents search kar raha hoon, bas thoda intezar kijiye.",
+                  spokenHint:
+                    "Main abhi official portal par niyam aur zaroori documents search kar raha hoon, bas thoda intezar kijiye.",
                   progressPhase: "researching",
                 });
               } else if (name === "stageForm") {
@@ -504,7 +524,8 @@ STRICT REGULATORY, SAFETY & PROHIBITED COMMERCE POLICY (MANDATORY):
                   status: "working",
                   activeTool: "stageForm",
                   description: `Generating dynamic MSME form: "${toolArgs.title || query}"`,
-                  spokenHint: "Form ke chaar sections aur zaroori fields screen par assemble ho rahe hain, lagbhag taiyar hai.",
+                  spokenHint:
+                    "Form ke chaar sections aur zaroori fields screen par assemble ho rahe hain, lagbhag taiyar hai.",
                   progressPhase: "building_form",
                 });
               } else if (name === "stageDocument") {
@@ -512,23 +533,32 @@ STRICT REGULATORY, SAFETY & PROHIBITED COMMERCE POLICY (MANDATORY):
                   status: "working",
                   activeTool: "stageDocument",
                   description: `Generating document / catalog: "${toolArgs.title || query}"`,
-                  spokenHint: "Aapka document aur price catalog screen par taiyar ho raha hai.",
+                  spokenHint:
+                    "Aapka document aur price catalog screen par taiyar ho raha hai.",
                   progressPhase: "building_document",
                 });
-              } else if (name === "getMandiRates" || name === "getMandiArbitrage") {
+              } else if (
+                name === "getMandiRates" ||
+                name === "getMandiArbitrage"
+              ) {
                 sendEvent("status", {
                   status: "working",
                   activeTool: name,
                   description: `Fetching live APMC mandi rates for: ${toolArgs.commodity || query}`,
-                  spokenHint: "Mandi portal se taaza bhav aur inter-mandi munafey ka hisab nikala ja raha hai.",
+                  spokenHint:
+                    "Mandi portal se taaza bhav aur inter-mandi munafey ka hisab nikala ja raha hai.",
                   progressPhase: "fetching_rates",
                 });
-              } else if (name === "scanCatchmentRadar" || name === "searchCompetitors") {
+              } else if (
+                name === "scanCatchmentRadar" ||
+                name === "searchCompetitors"
+              ) {
                 sendEvent("status", {
                   status: "working",
                   activeTool: name,
                   description: `Scanning Google Maps catchment radar for: ${toolArgs.category || query}`,
-                  spokenHint: "Google Maps par local competitors aur unke ratings scan ho rahe hain.",
+                  spokenHint:
+                    "Google Maps par local competitors aur unke ratings scan ho rahe hain.",
                   progressPhase: "scanning_map",
                 });
               } else if (name === "runSWOTScan") {
@@ -536,7 +566,8 @@ STRICT REGULATORY, SAFETY & PROHIBITED COMMERCE POLICY (MANDATORY):
                   status: "working",
                   activeTool: "runSWOTScan",
                   description: `Compiling 4-quadrant SWOT matrix for: ${toolArgs.category || query}`,
-                  spokenHint: "Aapke business ke liye SWOT analysis matrix taiyar ho rahi hai.",
+                  spokenHint:
+                    "Aapke business ke liye SWOT analysis matrix taiyar ho rahi hai.",
                   progressPhase: "analyzing_swot",
                 });
               } else if (name === "evaluateGovtSchemes") {
@@ -544,7 +575,8 @@ STRICT REGULATORY, SAFETY & PROHIBITED COMMERCE POLICY (MANDATORY):
                   status: "working",
                   activeTool: "evaluateGovtSchemes",
                   description: `Verifying government MSME schemes for: ${toolArgs.businessSector || query}`,
-                  spokenHint: "Sarkari subsidy aur loan schemes ki eligibility check ho rahi hai.",
+                  spokenHint:
+                    "Sarkari subsidy aur loan schemes ki eligibility check ho rahi hai.",
                   progressPhase: "matching_schemes",
                 });
               } else if (name === "evaluateCreditAndEMI") {
@@ -552,7 +584,8 @@ STRICT REGULATORY, SAFETY & PROHIBITED COMMERCE POLICY (MANDATORY):
                   status: "working",
                   activeTool: "evaluateCreditAndEMI",
                   description: `Calculating loan EMI & bank rates for ₹${toolArgs.amount || query}`,
-                  spokenHint: "Bank loan EMI aur byaaj daron ki calculation chal rahi hai.",
+                  spokenHint:
+                    "Bank loan EMI aur byaaj daron ki calculation chal rahi hai.",
                   progressPhase: "calculating_emi",
                 });
               } else if (name === "stageChart") {
@@ -590,9 +623,15 @@ STRICT REGULATORY, SAFETY & PROHIBITED COMMERCE POLICY (MANDATORY):
 
               let toolOut: any = null;
               try {
-                toolOut = await (t as any).execute(toolArgs, { ...context, toolCallId });
+                toolOut = await (t as any).execute(toolArgs, {
+                  ...context,
+                  toolCallId,
+                });
               } catch (execErr: any) {
-                toolOut = { success: false, error: execErr?.message || "Execution error" };
+                toolOut = {
+                  success: false,
+                  error: execErr?.message || "Execution error",
+                };
               }
 
               const finalSummary =
@@ -637,7 +676,7 @@ STRICT REGULATORY, SAFETY & PROHIBITED COMMERCE POLICY (MANDATORY):
                       title:
                         subagentCalls.length > 1
                           ? `Market Intelligence Dossier (${subagentCalls.length} Tabs Active)`
-                          : (toolOut.title || "Market Intelligence Dossier"),
+                          : toolOut.title || "Market Intelligence Dossier",
                       summary:
                         toolOut.spokenSummary ||
                         toolOut.summary ||
@@ -649,7 +688,8 @@ STRICT REGULATORY, SAFETY & PROHIBITED COMMERCE POLICY (MANDATORY):
                       },
                     }
                   : {
-                      artifactId: toolOut.artifactId || toolOut.data?.artifactId,
+                      artifactId:
+                        toolOut.artifactId || toolOut.data?.artifactId,
                       targetArtifactId: toolOut.targetArtifactId,
                       isUpdated: toolOut.isUpdated,
                       artifactType: toolOut.artifactType,
@@ -670,7 +710,6 @@ STRICT REGULATORY, SAFETY & PROHIBITED COMMERCE POLICY (MANDATORY):
                   progressPhase: "completed",
                   artifact: artifactPayload,
                 });
-
               }
 
               return toolOut;
@@ -682,7 +721,10 @@ STRICT REGULATORY, SAFETY & PROHIBITED COMMERCE POLICY (MANDATORY):
           const aiStream = streamText({
             model,
             system: systemInstruction,
-            messages: [...chatHistoryMessages, { role: "user", content: userParts }],
+            messages: [
+              ...chatHistoryMessages,
+              { role: "user", content: userParts },
+            ],
             tools: wrappedTools as any,
             stopWhen: isStepCount(6),
             providerOptions: {

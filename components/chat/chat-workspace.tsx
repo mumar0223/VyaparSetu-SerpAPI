@@ -1971,11 +1971,14 @@ function formatSmartChatTitle(rawText: string): string {
         onOpenEnterprise={() => setActiveView("enterprise")}
       />
 
+      {/* ── Subtle Top Fade Shield (Softens scrolling content under floating controls) ── */}
+      <div className="pointer-events-none fixed top-0 inset-x-0 h-16 bg-gradient-to-b from-background/80 via-background/30 to-transparent z-30" />
+
       {/* ── Top-Left Floating Controls (When Sidebar is Collapsed) ── */}
       {!isSidebarOpen && (
         <div
           className={cn(
-            "fixed top-3 left-3 z-30 items-center pointer-events-auto select-none",
+            "fixed top-3 left-3 z-40 items-center pointer-events-auto select-none",
             isVoiceMode ? "hidden lg:flex" : "flex",
           )}
         >
@@ -2003,7 +2006,7 @@ function formatSmartChatTitle(rawText: string): string {
       )}
 
       {/* ── Top-Right Header: Language Dropdown + User Profile Button ── */}
-      <div className="fixed top-3 right-3 md:right-6 z-30 flex items-center gap-2 pointer-events-auto select-none">
+      <div className="fixed top-3 right-3 md:right-6 z-40 flex items-center gap-2 pointer-events-auto select-none">
         {/* Language Dropdown */}
         <LanguageSwitcher variant="brand" />
 
@@ -2254,8 +2257,8 @@ function formatSmartChatTitle(rawText: string): string {
               className="h-1 w-full shrink-0 pointer-events-none"
             />
 
-            {/* Scrollable Message List: pt-20 on mobile & desktop clears floating buttons; pb-6 bottom spacing */}
-            <div className="flex-1 w-full max-w-3xl mx-auto px-4 md:px-6 pt-20 md:pt-20 pb-6">
+            {/* Scrollable Message List: pt-20 on mobile & pt-24 on desktop clears floating buttons; pb-6 bottom spacing */}
+            <div className="flex-1 w-full max-w-3xl mx-auto px-4 md:px-6 pt-20 md:pt-24 pb-6">
               <ChatMessageList
                 messages={messages}
                 isLoading={isLoading}

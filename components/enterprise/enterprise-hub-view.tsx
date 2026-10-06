@@ -621,7 +621,7 @@ export function EnterpriseHubView({
   const creditData = intelligence?.credit || null;
 
   return (
-    <div className="flex-1 w-full h-full overflow-y-auto font-sans p-4 sm:p-6 lg:p-8 pt-20 md:pt-20">
+    <div className="flex-1 w-full h-full overflow-y-auto font-sans p-4 sm:p-6 lg:p-8 pt-20 sm:pt-20 md:pt-24 lg:pt-24">
       <div className="max-w-6xl mx-auto space-y-6 pb-20">
         {/* ── Executive Header Banner ── */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-6 rounded-3xl bg-gradient-to-br from-white/80 via-white/40 to-mint-pale/40 dark:from-card dark:via-card/60 dark:to-muted/30 border border-sage/40 dark:border-border backdrop-blur-xl shadow-xs">

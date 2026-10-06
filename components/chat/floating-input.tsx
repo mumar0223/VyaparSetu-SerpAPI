@@ -479,8 +479,7 @@ export function FloatingInput({
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={displayPlaceholder}
-            disabled={isLoading}
-            className="w-full resize-none bg-transparent px-3 py-2 text-[14px] sm:text-[15px] leading-relaxed text-foreground placeholder:text-muted-foreground focus:outline-hidden disabled:opacity-50 min-h-[44px] max-h-[180px]"
+            className="w-full resize-none bg-transparent px-3 py-2 text-[14px] sm:text-[15px] leading-relaxed text-foreground placeholder:text-muted-foreground focus:outline-hidden min-h-[44px] max-h-[180px]"
           />
 
           {/* Bottom Action Bar */}
@@ -529,6 +528,8 @@ export function FloatingInput({
                 title={
                   isAnyFileUploading
                     ? "Please wait for files to finish uploading"
+                    : isLoading
+                    ? "AI is generating a response..."
                     : "Send message"
                 }
                 className={cn(

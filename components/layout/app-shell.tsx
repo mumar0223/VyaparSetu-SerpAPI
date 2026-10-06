@@ -143,9 +143,12 @@ export function AppShell({
         activeView={activeView as any}
       />
 
+      {/* ── Subtle Top Fade Shield (Softens scrolling content under floating controls) ── */}
+      <div className="pointer-events-none fixed top-0 inset-x-0 h-16 bg-gradient-to-b from-background/80 via-background/30 to-transparent z-30" />
+
       {/* ── Top-Left Floating Controls (When Sidebar is Collapsed) ── */}
       {!isSidebarOpen && (
-        <div className="fixed top-3 left-3 z-30 flex items-center gap-1.5 pointer-events-auto">
+        <div className="fixed top-3 left-3 z-40 flex items-center gap-1.5 pointer-events-auto">
           <button
             onClick={() => setIsSidebarOpen(true)}
             title="Open chat history"
@@ -158,7 +161,7 @@ export function AppShell({
       )}
 
       {/* ── Top-Right Header: Language Dropdown + User Profile Button ── */}
-      <div className="fixed top-3 right-3 md:right-6 z-30 flex items-center gap-2 pointer-events-auto select-none">
+      <div className="fixed top-3 right-3 md:right-6 z-40 flex items-center gap-2 pointer-events-auto select-none">
         <LanguageSwitcher variant="brand" />
 
         <button

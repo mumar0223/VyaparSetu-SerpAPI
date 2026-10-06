@@ -7,7 +7,6 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
-  DialogFooter,
 } from "@/components/ui/dialog";
 import { MapPin, Building2, Tag, IndianRupee, User, Check, Trash2 } from "lucide-react";
 import {
@@ -265,37 +264,37 @@ export function BusinessPersonaDialog({
             </div>
           </div>
 
-          <DialogFooter className="flex items-center justify-between gap-2 pt-3 border-t border-border/50">
+          <div className="pt-4 mt-6 border-t border-sage/30 dark:border-border flex flex-col-reverse sm:flex-row items-center justify-between gap-3">
             {currentProfile ? (
               <button
                 type="button"
                 onClick={handleClear}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
+                className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold text-destructive hover:bg-destructive/10 border border-destructive/20 hover:border-destructive/40 transition-all cursor-pointer"
               >
                 <Trash2 className="size-3.5" />
                 <span>Reset Profile</span>
               </button>
             ) : (
-              <div />
+              <div className="hidden sm:block" />
             )}
 
-            <div className="flex items-center gap-2">
+            <div className="w-full sm:w-auto flex items-center justify-end gap-2.5">
               <button
                 type="button"
                 onClick={onClose}
-                className="px-3.5 py-2 rounded-xl text-xs font-semibold text-muted-foreground hover:bg-muted transition-colors cursor-pointer"
+                className="flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs font-semibold text-foreground/80 hover:text-foreground bg-white dark:bg-card border border-sage/30 dark:border-border hover:bg-cream dark:hover:bg-muted transition-all cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-mint hover:bg-mint/90 text-black shadow-xs transition-colors cursor-pointer"
+                className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-5 py-2 rounded-xl text-xs font-bold bg-mint hover:bg-mint/90 text-forest-deep dark:text-black shadow-xs hover:shadow-md transition-all cursor-pointer"
               >
                 <Check className="size-3.5 stroke-[2.5]" />
                 <span>Save Profile</span>
               </button>
             </div>
-          </DialogFooter>
+          </div>
         </form>
       </DialogContent>
     </Dialog>
