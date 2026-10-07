@@ -47,9 +47,9 @@ export function SchemesCanvas({ data }: SchemesCanvasProps) {
       <div className="space-y-4">
         <h4 className="text-sm font-semibold">Matched Government Subsidies & Credit Facilities</h4>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {data.schemes.map((scheme) => (
+          {data.schemes.map((scheme, sIdx) => (
             <div
-              key={scheme.id}
+              key={scheme.id || `scheme-${sIdx}`}
               className="p-4.5 rounded-2xl border border-border/80 bg-card space-y-3 text-xs"
             >
               <div className="flex justify-between items-start gap-2">

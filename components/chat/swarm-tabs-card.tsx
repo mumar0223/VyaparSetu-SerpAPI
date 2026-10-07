@@ -275,6 +275,17 @@ function SwarmTabsCardInner({
     }
   });
 
+  // Guarantee strictly unique domain IDs across all awakened sub-agents
+  const seenDomainIds = new Set<string>();
+  awakenedDomains.forEach((d, i) => {
+    let uniqueId = d.id || `domain_${i}`;
+    while (seenDomainIds.has(uniqueId)) {
+      uniqueId = `${uniqueId}_${i}`;
+    }
+    seenDomainIds.add(uniqueId);
+    d.id = uniqueId;
+  });
+
   // Track user manual selection (null until user explicitly clicks a tab)
   const [userSelectedTabId, setUserSelectedTabId] = useState<string | null>(null);
   const [isPayloadModalOpen, setIsPayloadModalOpen] = useState(false);
@@ -403,12 +414,12 @@ function SwarmTabsCardInner({
       {/* ── Dynamic Tab Bar: Sleek Pills Rendered Only When Count >= 2 ── */}
       {isMultiDomain && (
         <div className="flex items-center gap-1.5 pt-2 pb-1 overflow-x-auto no-scrollbar">
-          {awakenedDomains.map((domain) => {
+          {awakenedDomains.map((domain, dIdx) => {
             const Icon = domain.icon;
             const isActive = domain.id === activeTabId;
             return (
               <button
-                key={domain.id}
+                key={domain.id || `tab-${dIdx}`}
                 onClick={() => {
                   setUserSelectedTabId(domain.id);
                   setTimeout(() => {

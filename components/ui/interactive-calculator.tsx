@@ -100,11 +100,23 @@ export function evaluateSafeFormula(
 
   // 2. Tokenize expression
   // Replace variable identifiers with their numeric value
+  // Build case-insensitive variable lookup so e.g. "Cost" and "cost" both resolve properly
+  const normalizedVars: Record<string, number> = { ...vars };
+  for (const [k, v] of Object.entries(vars)) {
+    if (k) normalizedVars[k.toLowerCase()] = v;
+  }
+
   // Sort keys by length descending so longer variable names match first
-  const sortedKeys = Object.keys(vars).sort((a, b) => b.length - a.length);
+  const sortedKeys = Object.keys(normalizedVars).sort((a, b) => b.length - a.length);
   for (const k of sortedKeys) {
-    const regex = new RegExp(`\\b${k}\\b`, "g");
-    sanitized = sanitized.replace(regex, String(vars[k]));
+    if (!k) continue;
+    const escaped = k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    try {
+      const regex = new RegExp(`(?<![a-zA-Z0-9_])${escaped}(?![a-zA-Z0-9_])`, "gi");
+      sanitized = sanitized.replace(regex, String(normalizedVars[k] ?? 0));
+    } catch {
+      sanitized = sanitized.split(k).join(String(normalizedVars[k] ?? 0));
+    }
   }
 
   // 3. Safe recursive descent arithmetic parser
@@ -238,18 +250,56 @@ function formatOutputValue(val: number, format?: string, explicitUnit?: string):
 
 export function InteractiveCalculator({ rawJson, spec }: { rawJson?: string; spec?: CalculatorSpec }) {
   const parsedSpec = useMemo<CalculatorSpec | null>(() => {
-    if (spec) return spec;
-    if (!rawJson) return null;
-    try {
-      const cleaned = rawJson
-        .trim()
-        .replace(/^```(?:calculator|simulator|calc|json)?\s*/i, "")
-        .replace(/\s*```$/, "")
-        .trim();
-      return JSON.parse(cleaned);
-    } catch {
-      return null;
+    let raw: any = spec;
+    if (!raw && rawJson) {
+      try {
+        const cleaned = rawJson
+          .trim()
+          .replace(/^```(?:calculator|simulator|calc|json)?\s*/i, "")
+          .replace(/\s*```$/, "")
+          .trim();
+        raw = JSON.parse(cleaned);
+      } catch {
+        return null;
+      }
     }
+    if (!raw || typeof raw !== "object") return null;
+
+    const seenInputIds = new Set<string>();
+    const inputs = Array.isArray(raw.inputs)
+      ? raw.inputs.map((inp: any, idx: number) => {
+          let id =
+            typeof inp?.id === "string" && inp.id.trim()
+              ? inp.id.trim()
+              : (inp?.label ? inp.label.toLowerCase().replace(/[^a-z0-9]/g, "_") : "") || `input_${idx}`;
+          while (seenInputIds.has(id)) {
+            id = `${id}_${idx}`;
+          }
+          seenInputIds.add(id);
+          return { ...inp, id };
+        })
+      : [];
+
+    const seenOutputIds = new Set<string>();
+    const outputs = Array.isArray(raw.outputs)
+      ? raw.outputs.map((out: any, idx: number) => {
+          let id =
+            typeof out?.id === "string" && out.id.trim()
+              ? out.id.trim()
+              : (out?.label ? out.label.toLowerCase().replace(/[^a-z0-9]/g, "_") : "") || `output_${idx}`;
+          while (seenOutputIds.has(id)) {
+            id = `${id}_${idx}`;
+          }
+          seenOutputIds.add(id);
+          return { ...out, id };
+        })
+      : [];
+
+    return {
+      ...raw,
+      inputs,
+      outputs,
+    };
   }, [rawJson, spec]);
 
   // Track state for each input field
@@ -257,7 +307,8 @@ export function InteractiveCalculator({ rawJson, spec }: { rawJson?: string; spe
     if (!parsedSpec || !Array.isArray(parsedSpec.inputs)) return {};
     const init: Record<string, number> = {};
     for (const inp of parsedSpec.inputs) {
-      const def = inp.defaultValue !== undefined ? Number(inp.defaultValue) : inp.min !== undefined ? inp.min : 0;
+      const numMin = typeof inp.min === "number" ? inp.min : !isNaN(Number(inp.min)) ? Number(inp.min) : 0;
+      const def = inp.defaultValue !== undefined ? Number(inp.defaultValue) : numMin;
       init[inp.id] = isNaN(def) ? 0 : def;
     }
     return init;
@@ -349,7 +400,7 @@ export function InteractiveCalculator({ rawJson, spec }: { rawJson?: string; spe
               const isHighlight = out.highlight || idx === computedOutputs.length - 1;
               return (
                 <div
-                  key={idx}
+                  key={out.id || `out-${idx}`}
                   className={cn(
                     "p-3 rounded-xl border transition-all flex flex-col justify-between",
                     isHighlight
@@ -390,12 +441,12 @@ export function InteractiveCalculator({ rawJson, spec }: { rawJson?: string; spe
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {parsedSpec.inputs.map((inp) => {
+            {parsedSpec.inputs.map((inp, idx) => {
               const curVal = values[inp.id] !== undefined ? values[inp.id] : (inp.min || 0);
 
               if (inp.type === "select" && inp.options && inp.options.length > 0) {
                 return (
-                  <div key={inp.id} className="space-y-1.5">
+                  <div key={inp.id || `inp-${idx}`} className="space-y-1.5">
                     <label className="text-xs font-medium text-foreground/90 block">
                       {inp.label}
                     </label>
@@ -405,7 +456,7 @@ export function InteractiveCalculator({ rawJson, spec }: { rawJson?: string; spe
                       className="w-full h-9 px-3 rounded-xl bg-white dark:bg-zinc-900 border border-sage/30 dark:border-zinc-800 text-xs font-semibold text-foreground focus:outline-hidden focus:border-mint cursor-pointer shadow-2xs"
                     >
                       {inp.options.map((opt, oIdx) => (
-                        <option key={oIdx} value={opt.value}>
+                        <option key={`${inp.id || idx}-opt-${oIdx}-${opt.value}`} value={opt.value}>
                           {opt.label}
                         </option>
                       ))}
@@ -414,13 +465,13 @@ export function InteractiveCalculator({ rawJson, spec }: { rawJson?: string; spe
                 );
               }
 
-              const min = inp.min !== undefined ? inp.min : 0;
-              const max = inp.max !== undefined ? inp.max : 100;
-              const step = inp.step !== undefined ? inp.step : 1;
+              const min = typeof inp.min === "number" ? inp.min : !isNaN(Number(inp.min)) ? Number(inp.min) : 0;
+              const max = typeof inp.max === "number" ? inp.max : !isNaN(Number(inp.max)) ? Number(inp.max) : 100;
+              const step = typeof inp.step === "number" ? inp.step : !isNaN(Number(inp.step)) ? Number(inp.step) : 1;
 
               return (
                 <div
-                  key={inp.id}
+                  key={inp.id || `inp-${idx}`}
                   className="p-3 rounded-xl bg-cream/30 dark:bg-zinc-900/40 border border-sage/20 dark:border-zinc-800/80 space-y-2"
                 >
                   <div className="flex items-center justify-between text-xs">

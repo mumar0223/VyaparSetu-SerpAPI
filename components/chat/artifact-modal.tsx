@@ -390,9 +390,9 @@ export function ArtifactModal({
               align="start"
               className="w-(--anchor-width) min-w-[180px] bg-white dark:bg-[#18181b] border border-sage/30 dark:border-zinc-800 rounded-xl shadow-xl z-50 p-1"
             >
-              {(field.options || []).map((opt: string) => (
+              {(field.options || []).map((opt: string, optIdx: number) => (
                 <DropdownMenuItem
-                  key={opt}
+                  key={`${opt}-${optIdx}`}
                   onClick={() => {
                     handleDynamicFieldChange(field.id, opt);
                     setInlineEditingFieldId(null);
@@ -1513,7 +1513,8 @@ export function ArtifactModal({
 
                             return (
                               <div key={rIdx} className={gridCls}>
-                                {rFields.map((field: any) => {
+                                {rFields.map((field: any, fIdx: number) => {
+                                  const fieldKey = field?.id ? String(field.id) : `f-${rIdx}-${fIdx}`;
                                   const fieldVal =
                                     formData.values?.[field.id] !== undefined
                                       ? formData.values[field.id]
@@ -1521,7 +1522,7 @@ export function ArtifactModal({
 
                                   if (field.type === "checkbox") {
                                     return (
-                                      <div key={field.id} className="w-full space-y-1">
+                                      <div key={fieldKey} className="w-full space-y-1">
                                         <label className="flex items-start sm:items-center gap-3 p-3.5 rounded-xl bg-white dark:bg-zinc-900 border border-sage/30 dark:border-zinc-800 cursor-pointer select-none hover:border-mint transition-colors w-full shadow-2xs">
                                           <input
                                             type="checkbox"
@@ -1548,7 +1549,7 @@ export function ArtifactModal({
                                   }
 
                                   return (
-                                    <div key={field.id} className="space-y-1.5 w-full">
+                                    <div key={fieldKey} className="space-y-1.5 w-full">
                                       <label className="text-xs font-semibold text-foreground/90 block">
                                         {field.label || field.id}
                                         {field.required && (
@@ -1568,9 +1569,9 @@ export function ArtifactModal({
                                             align="start"
                                             className="w-(--anchor-width) min-w-[180px] bg-white dark:bg-[#18181b] border border-sage/30 dark:border-zinc-800 rounded-xl shadow-xl z-50 p-1"
                                           >
-                                            {(field.options || []).map((opt: string) => (
+                                            {(field.options || []).map((opt: string, optIdx: number) => (
                                               <DropdownMenuItem
-                                                key={opt}
+                                                key={`${fieldKey}-opt-${optIdx}-${opt}`}
                                                 onClick={() =>
                                                   handleDynamicFieldChange(field.id, opt)
                                                 }
