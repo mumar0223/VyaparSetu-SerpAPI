@@ -588,15 +588,8 @@ STRICT REGULATORY, SAFETY & PROHIBITED COMMERCE POLICY (MANDATORY):
                     "Bank loan EMI aur byaaj daron ki calculation chal rahi hai.",
                   progressPhase: "calculating_emi",
                 });
-              } else if (name === "stageChart") {
-                sendEvent("status", {
-                  status: "working",
-                  activeTool: "stageChart",
-                  description: `Building visual market trend chart for: ${toolArgs.title || query}`,
-                  spokenHint: "Screen par graph aur trend chart ban raha hai.",
-                  progressPhase: "building_chart",
-                });
               }
+
 
               const def = (TOOL_DEFINITIONS as any)[name] || {
                 icon: "bot",

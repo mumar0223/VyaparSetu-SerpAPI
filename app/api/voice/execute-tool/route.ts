@@ -51,8 +51,7 @@ export async function POST(req: NextRequest) {
     const isComplexTool =
       toolName === "triggerScreenAction" ||
       targetTool === "stageForm" ||
-      targetTool === "stageChart" ||
-      targetTool === "stageBudget" ||
+      targetTool === "stageDocument" ||
       Boolean(args.audioBase64);
 
     if (isComplexTool) {
@@ -149,9 +148,6 @@ You MUST invoke the appropriate tool with complete, authentic, professional Indi
 - If stageForm: Build complete, real-world sections matching the user's requested bank or scheme (1. Personal & KYC Details; 2. Enterprise Details; 3. Banking & Loan Requirement with Bank Name, Branch IFSC, Account No, Amount; 4. Statutory Declaration).
 - If getMandiArbitrage or Mandi rates: Call getMandiArbitrage with the commodity and district/state in English.
 - If stageDocument: Use rich GitHub-Flavored Markdown with tables, \`\`\`chart for numerical comparisons, and \`\`\`mermaid for workflow/process diagrams. Never use ASCII progress bars or mermaid xychart.
-- If stageChart: Provide at least 5-6 realistic monthly or category data points, suitable xAxisKey, and series.
-- If stageBudget: Provide realistic category allocations summing to the budget limit.
-- If stageExpense: Record expense with category and amount.
 Execute the tool now.`;
 
     const userParts: any[] = [];
@@ -428,59 +424,7 @@ async function generateAuthenticFallback({
     }
   }
 
-  if (toolName === "stageChart") {
-    const title = args.title || "6-Month APMC Commodity Price Trend";
-    const chartType = args.chartType || "line";
-    const months = ["Oct 2025", "Nov 2025", "Dec 2025", "Jan 2026", "Feb 2026", "Mar 2026"];
-    const base = query.includes("onion") ? 2600 : query.includes("wheat") ? 2350 : 2500;
 
-    const data = months.map((m, idx) => ({
-      month: m,
-      modalPrice: Math.round(base + Math.sin(idx * 0.9) * 450 + idx * 40),
-      arrivalsQuintals: Math.round(520 + (idx % 3) * 110 + idx * 25),
-    }));
-
-    const series = [
-      { dataKey: "modalPrice", name: "Modal Price (₹/Quintal)", color: "#10B981" },
-      { dataKey: "arrivalsQuintals", name: "Arrivals (Quintals)", color: "#3B82F6" },
-    ];
-
-    if (tools.stageChart && typeof tools.stageChart.execute === "function") {
-      return await tools.stageChart.execute({
-        targetArtifactId: args.targetArtifactId,
-        chartType,
-        title,
-        description: args.description || `Historical monthly APMC trends for ${title}`,
-        xAxisKey: "month",
-        data,
-        series,
-      });
-    }
-  }
-
-  if (toolName === "stageBudget") {
-    const name = args.name || "Enterprise Operating Budget";
-    const period = args.period || "Monthly";
-    const totalAmount = args.totalAmount || 150000;
-
-    const items = [
-      { category: "Inventory & Raw Stock", allocatedAmount: Math.round(totalAmount * 0.45) },
-      { category: "Logistics & Delivery", allocatedAmount: Math.round(totalAmount * 0.20) },
-      { category: "Staff Wages & Labor", allocatedAmount: Math.round(totalAmount * 0.15) },
-      { category: "Utilities, Rent & Electricity", allocatedAmount: Math.round(totalAmount * 0.10) },
-      { category: "Emergency Cash Buffer", allocatedAmount: Math.round(totalAmount * 0.10) },
-    ];
-
-    if (tools.stageBudget && typeof tools.stageBudget.execute === "function") {
-      return await tools.stageBudget.execute({
-        targetArtifactId: args.targetArtifactId,
-        name,
-        period,
-        totalAmount,
-        items,
-      });
-    }
-  }
 
   return { success: true, message: `Completed ${toolName}` };
 }

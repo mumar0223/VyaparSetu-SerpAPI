@@ -1075,8 +1075,8 @@ export const VoiceAgentView = React.memo(function VoiceAgentView({
                   <Search className="size-3.5" />
                 ) : runningTasks[0]?.activeTool === "stageForm" ? (
                   <ClipboardList className="size-3.5 animate-bounce" />
-                ) : runningTasks[0]?.activeTool === "stageChart" ? (
-                  <BarChart3 className="size-3.5 animate-pulse" />
+                ) : runningTasks[0]?.activeTool === "stageDocument" ? (
+                  <FileText className="size-3.5 animate-pulse" />
                 ) : (
                   <Loader2 className="size-3.5 animate-spin" />
                 )}

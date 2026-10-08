@@ -1264,25 +1264,22 @@ export function useLiveAgent(options: LiveAgentOptions = {}) {
                     optionsRef.current.onArtifactAction?.(art);
 
                     const appropriateToolName =
-                      art.artifactType === "document"
+                      art.artifactType === "document" ||
+                      art.artifactType === "chart" ||
+                      art.artifactType === "budget" ||
+                      art.artifactType === "expense"
                         ? "stageDocument"
-                        : art.artifactType === "chart"
-                          ? "stageChart"
-                          : art.artifactType === "budget"
-                            ? "stageBudget"
-                            : art.artifactType === "expense"
-                              ? "stageExpense"
-                              : art.artifactType === "swarm_dossier" || art.artifactType === "mandi_arbitrage" || art.artifactType === "mandi"
-                                ? "getMandiArbitrage"
-                                : art.artifactType === "catchment_radar" || art.artifactType === "competitors"
-                                  ? "scanCatchmentRadar"
-                                  : art.artifactType === "govt_schemes" || art.artifactType === "schemes"
-                                    ? "evaluateGovtSchemes"
-                                    : art.artifactType === "emi_calculator" || art.artifactType === "credit"
-                                      ? "evaluateCreditAndEMI"
-                                      : art.artifactType === "swot_matrix" || art.artifactType === "swot"
-                                        ? "runSWOTScan"
-                                        : "stageForm";
+                        : art.artifactType === "swarm_dossier" || art.artifactType === "mandi_arbitrage" || art.artifactType === "mandi"
+                          ? "getMandiArbitrage"
+                          : art.artifactType === "catchment_radar" || art.artifactType === "competitors"
+                            ? "scanCatchmentRadar"
+                            : art.artifactType === "govt_schemes" || art.artifactType === "schemes"
+                              ? "evaluateGovtSchemes"
+                              : art.artifactType === "emi_calculator" || art.artifactType === "credit"
+                                ? "evaluateCreditAndEMI"
+                                : art.artifactType === "swot_matrix" || art.artifactType === "swot"
+                                  ? "runSWOTScan"
+                                  : "stageForm";
 
                     // Prepend into sessionCompletedTasks (latest first)
                     const compItem: CompletedTaskItem = {

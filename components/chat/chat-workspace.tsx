@@ -1910,7 +1910,7 @@ function formatSmartChatTitle(rawText: string): string {
                   artifactId: res.artifactId || res.data?.artifactId || tc.toolCallId || `art_${tc.toolName}_${i}`,
                   targetArtifactId: res.targetArtifactId,
                   isUpdated: res.isUpdated,
-                  artifactType: res.artifactType || (tc.toolName === "stageDocument" ? "document" : tc.toolName === "stageChart" ? "chart" : "document"),
+                  artifactType: res.artifactType || (tc.toolName === "stageDocument" ? "document" : "document"),
                   title: res.title || res.data?.title || tc.summary || "Interactive Intelligence",
                   summary: res.summary || res.data?.summary || "Draft prepared • Tap to review & edit",
                   data: res.data || res,

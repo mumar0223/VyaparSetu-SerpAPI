@@ -274,7 +274,7 @@ export function ChatMessageList({
         const imageRows = chunkImageRows(images);
         const isCompact = images.length > 6;
 
-        // Extract ONLY visual staged document artifacts and charts/forms (e.g. stageDocument, stageForm, stageChart)
+        // Extract ONLY visual staged document artifacts and forms (e.g. stageDocument, stageForm)
         // All swarm intelligence sub-agents (Radar, Mandi, SWOT, Schemes, Credit, ONDC, District, Custom Research)
         // are strictly rendered inside SwarmTabsCard and must never leak as duplicate inline documents!
         const artifacts: ArtifactPayload[] = [];

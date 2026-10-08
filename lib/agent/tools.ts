@@ -300,192 +300,7 @@ const SchemeEligibilitySchema = z
   })
   .passthrough();
 
-const StageBudgetSchema = z
-  .object({
-    targetArtifactId: z
-      .string()
-      .optional()
-      .describe("Optional ID or index of an existing budget to update in-place"),
-    name: z
-      .string()
-      .describe(
-        "Name of the budget plan, e.g. 'Q2 Operating Budget' or 'Harvest Stock Plan'",
-      ),
-    period: z
-      .enum(["Monthly", "Quarterly", "Annual", "Weekly"])
-      .default("Monthly")
-      .describe("Budget period frequency"),
-    totalAmount: z.number().positive().describe("Total budget limit in INR"),
-    startDate: z.string().optional().describe("Budget start date YYYY-MM-DD"),
-    endDate: z.string().optional().describe("Budget end date YYYY-MM-DD"),
-    alertThresholdPercent: z
-      .number()
-      .optional()
-      .describe("Threshold % to trigger overspend alert (e.g. 80, 90)"),
-    items: z
-      .array(
-        z.object({
-          category: z
-            .string()
-            .describe(
-              "Expense category, e.g. Inventory, Logistics, Wages, Utilities, Marketing",
-            ),
-          allocatedAmount: z
-            .number()
-            .positive()
-            .describe("Allocated amount in INR"),
-        }),
-      )
-      .min(1)
-      .describe("List of category allocations"),
-  })
-  .passthrough();
 
-const StageExpenseSchema = z
-  .object({
-    targetArtifactId: z
-      .string()
-      .optional()
-      .describe("Optional ID or index of an existing expense to update in-place"),
-    category: z
-      .string()
-      .describe(
-        "Expense category e.g. Inventory / Raw Materials, Logistics & Transport, Utilities, Rent, Wages",
-      ),
-    amount: z.number().positive().describe("Expense amount in INR"),
-    vendor: z.string().optional().describe("Vendor / Supplier name or party"),
-    description: z
-      .string()
-      .optional()
-      .describe("Brief description of the expense"),
-    invoiceNumber: z.string().optional().describe("Invoice / Bill / Challan number"),
-    taxAmount: z.number().optional().describe("GST or tax amount in INR"),
-    paymentMethod: z
-      .enum(["UPI", "CASH", "BANK_TRANSFER", "CHEQUE", "CREDIT_CARD", "OTHER"])
-      .default("UPI")
-      .describe("Payment method"),
-    paymentStatus: z
-      .enum(["PAID", "PENDING", "PARTIAL"])
-      .optional()
-      .default("PAID")
-      .describe("Payment settlement status"),
-    notes: z.string().optional().describe("Optional notes"),
-  })
-  .passthrough();
-
-const StageTransactionSchema = z
-  .object({
-    targetArtifactId: z
-      .string()
-      .optional()
-      .describe(
-        "Optional ID or index of an existing transaction to update in-place",
-      ),
-    type: z
-      .enum(["INCOME", "EXPENSE", "TRANSFER", "DEBT_PAYMENT", "SAVING", "OTHER"])
-      .describe("Transaction type"),
-    amount: z.number().positive().describe("Transaction amount in INR"),
-    category: z.string().optional().describe("Category of transaction"),
-    description: z
-      .string()
-      .optional()
-      .describe("Transaction description or customer/vendor name"),
-    paymentMethod: z
-      .enum(["UPI", "CASH", "BANK_TRANSFER", "CHEQUE", "CREDIT_CARD", "OTHER"])
-      .optional()
-      .default("UPI")
-      .describe("Payment method used"),
-    referenceNumber: z
-      .string()
-      .optional()
-      .describe("UPI UTR / Bank reference / Transaction ID"),
-    taxAmount: z.number().optional().describe("Tax / GST amount in INR"),
-  })
-  .passthrough();
-
-const StageSavingsGoalSchema = z
-  .object({
-    targetArtifactId: z
-      .string()
-      .optional()
-      .describe(
-        "Optional ID or index of an existing savings goal to update in-place",
-      ),
-    name: z
-      .string()
-      .describe(
-        "Goal name, e.g. 'New Cold Storage Machine' or 'Diwali Festival Stock Buffer'",
-      ),
-    targetAmount: z.number().positive().describe("Target savings goal in INR"),
-    currentAmount: z
-      .number()
-      .optional()
-      .describe("Current funds accumulated towards this goal in INR"),
-    targetDate: z
-      .string()
-      .optional()
-      .describe("Target completion date in YYYY-MM-DD format"),
-    monthlyContribution: z
-      .number()
-      .optional()
-      .describe("Planned monthly recurring contribution in INR"),
-    priority: z
-      .enum(["HIGH", "MEDIUM", "LOW"])
-      .optional()
-      .default("MEDIUM")
-      .describe("Priority ranking of the savings target"),
-  })
-  .passthrough();
-
-const StageDebtSchema = z
-  .object({
-    targetArtifactId: z
-      .string()
-      .optional()
-      .describe("Optional ID or index of an existing debt to update in-place"),
-    type: z
-      .enum([
-        "TERM_LOAN",
-        "WORKING_CAPITAL",
-        "EQUIPMENT_FINANCING",
-        "CREDIT_CARD",
-        "OTHER",
-      ])
-      .default("WORKING_CAPITAL")
-      .describe("Type of debt/liability"),
-    lender: z
-      .string()
-      .describe(
-        "Lender name, e.g. 'SBI MSME Branch' or 'Local Cooperative Bank'",
-      ),
-    totalAmount: z
-      .number()
-      .positive()
-      .describe("Original sanctioned loan amount in INR"),
-    amountOutStanding: z
-      .number()
-      .positive()
-      .describe("Current outstanding balance in INR"),
-    interestRate: z
-      .number()
-      .optional()
-      .describe("Annual interest rate percentage, e.g. 8.5"),
-    emiAmount: z.number().optional().describe("Monthly EMI installment in INR"),
-    tenureMonthsRemaining: z
-      .number()
-      .optional()
-      .describe("Remaining loan tenure in months"),
-    nextDueDate: z.string().optional().describe("Next EMI installment due date YYYY-MM-DD"),
-    subsidyLinked: z
-      .string()
-      .optional()
-      .describe("Associated government subsidy scheme if any (e.g. 'PMEGP 35%', 'Mudra Shishu')"),
-    collateralType: z
-      .string()
-      .optional()
-      .describe("Collateral status: 'CGTMSE_Zero_Collateral', 'Hypothecation', 'Property_Mortgage'"),
-  })
-  .passthrough();
 
 export const StageFormFieldSchema = z
   .object({
@@ -728,25 +543,13 @@ const GetArtifactsSchema = z
       .optional()
       .default("all")
       .describe(
-        "Filter by artifact type ('form', 'document', 'chart', 'budget', 'expense', 'transaction', 'saving_goal', 'debt', or 'all')",
+        "Filter by artifact type ('form', 'document', or 'all')",
       ),
     limit: z
       .number()
       .optional()
       .default(10)
       .describe("Max number of recent artifacts to retrieve (defaults to 10)"),
-  })
-  .passthrough();
-
-const StageDeleteRecordSchema = z
-  .object({
-    entityType: z
-      .string()
-      .describe("Type of entity to remove ('budget', 'expense', 'transaction', 'savingGoal', 'debt')"),
-    entityId: z.string().describe("ID of the record to delete"),
-    entityName: z
-      .string()
-      .describe("Human-readable title/name of the record for confirmation"),
   })
   .passthrough();
 
@@ -887,31 +690,40 @@ function getStagedArtifactsByType(
             })()
           : tc.result) || {};
 
+      const docType = (res.data?.docType || tc.args?.docType || "").toLowerCase();
+      const title = (res.title || res.data?.title || tc.args?.title || "").toLowerCase();
+
+      // Check stageDocument records by docType or title keywords, with backward-compatibility for past turns
       const matchesType =
-        (targetType === "budget" &&
-          (toolName === "stageBudget" || res.artifactType === "budget")) ||
-        (targetType === "expense" &&
-          (toolName === "stageExpense" || res.artifactType === "expense")) ||
-        (targetType === "transaction" &&
-          (toolName === "stageTransaction" ||
-            res.artifactType === "transaction")) ||
-        (targetType === "saving_goal" &&
-          (toolName === "stageSavingsGoal" ||
-            res.artifactType === "saving_goal" ||
-            res.artifactType === "savinggoal")) ||
-        (targetType === "debt" &&
-          (toolName === "stageDebt" || res.artifactType === "debt"));
+        (toolName === "stageDocument" &&
+          (docType.includes(targetType) ||
+            title.includes(targetType) ||
+            (targetType === "budget" && (docType.includes("budget") || title.includes("budget"))) ||
+            (targetType === "expense" && (docType.includes("expense") || title.includes("expense"))) ||
+            (targetType === "transaction" && (docType.includes("transaction") || docType.includes("ledger") || title.includes("transaction"))) ||
+            (targetType === "saving_goal" && (docType.includes("saving") || title.includes("saving"))) ||
+            (targetType === "debt" && (docType.includes("debt") || docType.includes("loan") || title.includes("debt") || title.includes("loan"))))) ||
+        res.artifactType === targetType ||
+        (targetType === "saving_goal" && res.artifactType === "savinggoal");
 
       if (matchesType) {
         const payload = res.data || res.artifact || tc.args;
         const id =
           payload?.id ||
+          payload?.artifactId ||
           res.artifactId ||
           tc.args?.targetArtifactId ||
           `rec_${items.length + 1}`;
         if (!seenIds.has(id)) {
           seenIds.add(id);
-          items.push(payload);
+          items.push({
+            id,
+            title: res.title || tc.args?.title || "Document Record",
+            docType: docType || targetType,
+            summary: res.summary || tc.args?.summary,
+            content: res.data?.content || tc.args?.content,
+            ...payload,
+          });
         }
       }
     }
@@ -1149,10 +961,7 @@ export function getAgentTools(ctx?: ToolContext) {
               const toolName = tc.toolName || tc.name;
               const isStagingTool =
                 toolName === "stageForm" ||
-                toolName === "stageDocument" ||
-                toolName === "stageChart" ||
-                toolName === "stageBudget" ||
-                toolName === "stageExpense";
+                toolName === "stageDocument";
 
               const art =
                 res?.artifact ||
@@ -1169,13 +978,7 @@ export function getAgentTools(ctx?: ToolContext) {
                   ? "form"
                   : toolName === "stageDocument"
                     ? "document"
-                    : toolName === "stageChart"
-                      ? "chart"
-                      : toolName === "stageBudget"
-                        ? "budget"
-                        : toolName === "stageExpense"
-                          ? "expense"
-                          : undefined);
+                    : undefined);
 
               if (art && rawType) {
                 const normalizedType =
@@ -1787,11 +1590,11 @@ ${cards.map((c) => `**${c.title}**: ${c.whyInThisDistrict}\n- *Subsidy:* ${(c.ma
     }),
 
     // ─────────────────────────────────────────────────────────────
-    // 7. FINANCIAL STATE TOOLS (Real Conversation-Staged Artifacts)
+    // 7. FINANCIAL STATE TOOLS (Query Staged Documents)
     // ─────────────────────────────────────────────────────────────
     getBudgets: tool({
       description:
-        "Retrieves active enterprise budget allocations and targets staged in the current conversation.",
+        "Retrieves active enterprise budget allocations and financial plans staged in the current conversation via stageDocument.",
       inputSchema: z.object({}).passthrough(),
       execute: async () => {
         const stagedBudgets = getStagedArtifactsByType(conversationId, "budget");
@@ -1801,7 +1604,7 @@ ${cards.map((c) => `**${c.title}**: ${c.whyInThisDistrict}\n- *Subsidy:* ${(c.ma
           count: stagedBudgets.length,
           message:
             stagedBudgets.length === 0
-              ? "No budget plans recorded yet in this session. You can create one using stageBudget."
+              ? "No budget plans recorded yet in this session. You can create a structured budget allocation table using stageDocument."
               : `Found ${stagedBudgets.length} active budget plan(s).`,
         };
       },
@@ -1809,7 +1612,7 @@ ${cards.map((c) => `**${c.title}**: ${c.whyInThisDistrict}\n- *Subsidy:* ${(c.ma
 
     getExpenses: tool({
       description:
-        "Retrieves logged business expenses and payments from the current conversation.",
+        "Retrieves logged business expenses and statements staged in the current conversation via stageDocument.",
       inputSchema: z
         .object({
           category: z.string().optional(),
@@ -1820,29 +1623,24 @@ ${cards.map((c) => `**${c.title}**: ${c.whyInThisDistrict}\n- *Subsidy:* ${(c.ma
         const stagedExpenses = getStagedArtifactsByType(conversationId, "expense");
         const filtered = category
           ? stagedExpenses.filter((e) =>
-              (e.category || "").toLowerCase().includes(category.toLowerCase()),
+              JSON.stringify(e).toLowerCase().includes(category.toLowerCase()),
             )
           : stagedExpenses;
-        const total = filtered.reduce(
-          (sum: number, e: any) => sum + (Number(e.amount) || 0),
-          0,
-        );
         return {
           success: true,
-          totalExpensesInList: total,
           expenses: filtered.slice(0, limit),
           count: filtered.length,
           message:
             filtered.length === 0
-              ? "No expenses logged yet in this session. You can log one using stageExpense."
-              : `Found ${filtered.length} logged expense(s).`,
+              ? "No expenses logged yet in this session. You can compile an expense statement using stageDocument."
+              : `Found ${filtered.length} logged expense record(s).`,
         };
       },
     }),
 
     getTransactions: tool({
       description:
-        "Retrieves master ledger transactions (Income, Expense, Transfers) staged in the current conversation.",
+        "Retrieves master ledger transactions and cash flow sheets staged in the current conversation via stageDocument.",
       inputSchema: z
         .object({
           type: z
@@ -1855,8 +1653,8 @@ ${cards.map((c) => `**${c.title}**: ${c.whyInThisDistrict}\n- *Subsidy:* ${(c.ma
       execute: async ({ type, limit = 10 }) => {
         const stagedTx = getStagedArtifactsByType(conversationId, "transaction");
         const filtered = type
-          ? stagedTx.filter(
-              (t) => (t.type || "").toUpperCase() === type.toUpperCase(),
+          ? stagedTx.filter((t) =>
+              JSON.stringify(t).toLowerCase().includes(type.toLowerCase()),
             )
           : stagedTx;
         return {
@@ -1865,15 +1663,15 @@ ${cards.map((c) => `**${c.title}**: ${c.whyInThisDistrict}\n- *Subsidy:* ${(c.ma
           count: filtered.length,
           message:
             filtered.length === 0
-              ? "No transactions recorded yet in this session. You can record one using stageTransaction."
-              : `Found ${filtered.length} transaction(s).`,
+              ? "No transactions recorded yet in this session. You can create a ledger transaction sheet using stageDocument."
+              : `Found ${filtered.length} transaction record(s).`,
         };
       },
     }),
 
     getSavingsGoals: tool({
       description:
-        "Retrieves active savings targets and accumulated funds staged in the current conversation.",
+        "Retrieves active savings targets and reserve fund plans staged in the current conversation via stageDocument.",
       inputSchema: z.object({}).passthrough(),
       execute: async () => {
         const stagedGoals = getStagedArtifactsByType(
@@ -1886,7 +1684,7 @@ ${cards.map((c) => `**${c.title}**: ${c.whyInThisDistrict}\n- *Subsidy:* ${(c.ma
           count: stagedGoals.length,
           message:
             stagedGoals.length === 0
-              ? "No savings goals established yet in this session. You can create one using stageSavingsGoal."
+              ? "No savings goals established yet in this session. You can create a savings target plan using stageDocument."
               : `Found ${stagedGoals.length} savings goal(s).`,
         };
       },
@@ -1894,7 +1692,7 @@ ${cards.map((c) => `**${c.title}**: ${c.whyInThisDistrict}\n- *Subsidy:* ${(c.ma
 
     getDebts: tool({
       description:
-        "Retrieves active loan liabilities and EMI schedules staged in the current conversation.",
+        "Retrieves active loan liabilities and EMI schedules staged in the current conversation via stageDocument.",
       inputSchema: z.object({}).passthrough(),
       execute: async () => {
         const stagedDebts = getStagedArtifactsByType(conversationId, "debt");
@@ -1904,7 +1702,7 @@ ${cards.map((c) => `**${c.title}**: ${c.whyInThisDistrict}\n- *Subsidy:* ${(c.ma
           count: stagedDebts.length,
           message:
             stagedDebts.length === 0
-              ? "No active loan liabilities or debt records found in this session. You can log one using stageDebt."
+              ? "No active loan liabilities or debt records found in this session. You can create an EMI & debt schedule using stageDocument."
               : `Found ${stagedDebts.length} active liability record(s).`,
         };
       },
@@ -2737,19 +2535,11 @@ export const TOOL_DEFINITIONS: Record<string, ToolMeta> = {
     formatSummary: (args) =>
       `Searched Google News for "${args?.query || "trade news"}"`,
   },
-  stageChart: {
-    name: "stageChart",
-    icon: "landmark",
-    formatSummary: (args) =>
-      args?.targetArtifactId
-        ? `Updated visual chart "${args?.title || "metrics"}"`
-        : `Generated ${args?.chartType || "visual"} chart for "${args?.title || "metrics"}"`,
-  },
   getBudgets: {
     name: "getBudgets",
     icon: "landmark",
     formatSummary: () =>
-      "Queried active enterprise budgets and category allocations",
+      "Queried enterprise budget plans",
   },
   getExpenses: {
     name: "getExpenses",
@@ -2766,7 +2556,7 @@ export const TOOL_DEFINITIONS: Record<string, ToolMeta> = {
   getSavingsGoals: {
     name: "getSavingsGoals",
     icon: "landmark",
-    formatSummary: () => "Queried savings targets and accumulated funds",
+    formatSummary: () => "Queried savings targets and plans",
   },
   getDebts: {
     name: "getDebts",
@@ -2783,44 +2573,6 @@ export const TOOL_DEFINITIONS: Record<string, ToolMeta> = {
     icon: "landmark",
     formatSummary: (args) =>
       `Evaluated ${(args?.schemeName || "Credit Scheme").replace(/_/g, " ")} subsidy criteria`,
-  },
-  stageBudget: {
-    name: "stageBudget",
-    icon: "landmark",
-    formatSummary: (args) =>
-      `Generated budget draft for ${args?.name || "enterprise"} (₹${args?.totalAmount || 0})`,
-  },
-  stageExpense: {
-    name: "stageExpense",
-    icon: "landmark",
-    formatSummary: (args) =>
-      `Generated expense draft for ${args?.category || "expense"} (₹${args?.amount || 0})`,
-  },
-  stageTransaction: {
-    name: "stageTransaction",
-    icon: "landmark",
-    formatSummary: (args) =>
-      `Generated ledger transaction draft for ${args?.type || "transaction"} (₹${args?.amount || 0})`,
-  },
-  stageSavingsGoal: {
-    name: "stageSavingsGoal",
-    icon: "landmark",
-    formatSummary: (args) =>
-      `Generated savings target draft for ${args?.name || "goal"} (₹${args?.targetAmount || 0})`,
-  },
-  stageDebt: {
-    name: "stageDebt",
-    icon: "landmark",
-    formatSummary: (args) =>
-      args?.targetArtifactId
-        ? `Updated loan liability draft with ${args?.lender || "lender"}`
-        : `Generated loan liability draft with ${args?.lender || "lender"}`,
-  },
-  stageDeleteRecord: {
-    name: "stageDeleteRecord",
-    icon: "landmark",
-    formatSummary: (args) =>
-      `Prepared delete confirmation for ${args?.entityName || "record"}`,
   },
   searchCompetitors: {
     name: "searchCompetitors",
